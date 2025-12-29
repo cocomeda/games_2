@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>運動精度評価テスト</title>
+
+<style>
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f0f2f5;
+    text-align: center;
+    touch-action: none;
+}
+
+#info {
+    padding: 10px;
+    font-size: 1.2em;
+}
+
+/* ===== フィールド ===== */
+#field {
+    position: relative;
+    width: 100vw;
+    height: 55vh;
+    background: #ddd;
+    overflow: hidden;
+}
+
+#target {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: #4caf50;
+    display: none;
+}
+
+#player {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: black;
+    left: 50%;
+    top: 50%;
+}
+
+/* ===== 結果オーバーレイ ===== */
+#fieldResult {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    color: white;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    font-size: 2.2em;
+    font-weight: bold;
+    z-index: 20;
+}
+
+/* ===== 操作エリア ===== */
+#controller {
+    height: 25vh;
+    margin: 10px;
+    border: 3px solid #333;
+    border-radius: 15px;
+    background: #fafafa;
+    position: relative;
+}
+
+#startOverlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    color: white;
+    font-size: 3em;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    cursor: pointer;
+}
+
+#stick {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #2196f3;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+</style>
+</head>
+
+<body>
+
+<div id="info">
+    残り: <span id="remain">20</span>　
+    時間: <span id="time">0.00</span> 秒
+</div>
+
+<div id="field">
+    <div id="target"></div>
+    <div id="player"></div>
+    <div id="fieldResult"></div>
+</div>
+
+<div id="controller">
+    <div id="startOverlay">START</div>
+    <div id="stick"></div>
+</div>
+
+<script>
+/* ===== 設定 ===== */
+const TRIALS = 25;
+const SPEED = 2.2;
+
+/* ===== 状態 ===== */
+let remaining, records = [];
+let gameActive = false;
+let startTime, lightTime, timerInterval;
+let lastX = null, lastY = null;
+
+/* 距離計測 */
+let pathLength = 0;
+let optimalLength = 0;
+let prevPX = null, prevPY = null;
+
+/* ===== DOM ===== */
+const field = document.getElementById("field");
+const target = document.getElementById("target");
+const player = document.getElementById("player");
+const controller = document.getElementById("controller");
+const stick = document.getElementById("stick");
+const startOverlay = document.getElementById("startOverlay");
+const fieldResult = document.getElementById("fieldResult");
+const remainEl = document.getElementById("remain");
+const timeEl = document.getElementById("time");
+
+/* ===== スタート ===== */
+startOverlay.addEventListener("pointerdown", () => {
+    startOverlay.style.display = "none";
+    fieldResult.style.display = "none";
+    startGame();
+});
+
+/* ===== ゲーム開始 ===== */
+function startGame() {
+    remaining = TRIALS;
+    records = [];
+    remainEl.textContent = remaining;
+    timeEl.textContent = "0.00";
+    gameActive = true;
+
+    player.style.left = "50%";
+    player.style.top = "50%";
+
+    clearInterval(timerInterval);
+    startTime = performance.now();
+    timerInterval = setInterval(updateTime, 10);
+
+    nextTarget();
+}
+
+/* ===== タイマー ===== */
+function updateTime() {
+    timeEl.textContent = ((performance.now() - startTime) / 1000).toFixed(2);
+}
+
+/* ===== ターゲット ===== */
+function nextTarget() {
+    const f = field.getBoundingClientRect();
+    const size = 60;
+
+    target.style.left = Math.random() * (f.width - size) + "px";
+    target.style.top = Math.random() * (f.height - size) + "px";
+    target.style.display = "block";
+
+    const p = player.getBoundingClientRect();
+    const t = target.getBoundingClientRect();
+
+    const px = p.left + p.width / 2;
+    const py = p.top + p.height / 2;
+    const tx = t.left + t.width / 2;
+    const ty = t.top + t.height / 2;
+
+    optimalLength = Math.hypot(tx - px, ty - py);
+    pathLength = 0;
+    prevPX = px;
+    prevPY = py;
+
+    lightTime = performance.now();
+}
+
+/* ===== 操作 ===== */
+controller.addEventListener("pointerdown", e => {
+    if (!gameActive) return;
+    lastX = e.clientX;
+    lastY = e.clientY;
+});
+
+controller.addEventListener("pointermove", e => {
+    if (!gameActive || lastX === null) return;
+
+    const dx = (e.clientX - lastX) * SPEED;
+    const dy = (e.clientY - lastY) * SPEED;
+
+    movePlayer(dx, dy);
+    moveStick(e);
+
+    lastX = e.clientX;
+    lastY = e.clientY;
+
+    accumulatePath();
+    checkHit();
+});
+
+controller.addEventListener("pointerup", resetStick);
+controller.addEventListener("pointerleave", resetStick);
+
+function resetStick() {
+    lastX = lastY = null;
+    stick.style.left = "50%";
+    stick.style.top = "50%";
+}
+
+/* ===== 移動 ===== */
+function movePlayer(dx, dy) {
+    const p = player.getBoundingClientRect();
+    const f = field.getBoundingClientRect();
+
+    let x = p.left - f.left + dx;
+    let y = p.top - f.top + dy;
+
+    x = Math.max(0, Math.min(f.width - 40, x));
+    y = Math.max(0, Math.min(f.height - 40, y));
+
+    player.style.left = x + "px";
+    player.style.top = y + "px";
+}
+
+/* ===== 距離加算 ===== */
+function accumulatePath() {
+    const p = player.getBoundingClientRect();
+    const cx = p.left + p.width / 2;
+    const cy = p.top + p.height / 2;
+
+    pathLength += Math.hypot(cx - prevPX, cy - prevPY);
+    prevPX = cx;
+    prevPY = cy;
+}
+
+function moveStick(e) {
+    const r = controller.getBoundingClientRect();
+    stick.style.left = (e.clientX - r.left) + "px";
+    stick.style.top = (e.clientY - r.top) + "px";
+}
+
+/* ===== 命中 ===== */
+function checkHit() {
+    const a = player.getBoundingClientRect();
+    const b = target.getBoundingClientRect();
+
+    if (a.left < b.right && a.right > b.left &&
+        a.top < b.bottom && a.bottom > b.top) {
+
+       
+ records.push({
+    optimal: optimalLength,
+    actual: pathLength,
+    time: (performance.now() - lightTime) / 1000,
+    ratio: pathLength / optimalLength
+});      
+       
+       
+       
+     
+
+        remaining--;
+        remainEl.textContent = remaining;
+
+        if (remaining > 0) nextTarget();
+        else finishGame();
+    }
+}
+
+/* ===== 終了 ===== */
+function finishGame() {
+    gameActive = false;
+    clearInterval(timerInterval);
+    target.style.display = "none";
+
+    const avgRatio =
+        records.reduce((s, r) => s + r.ratio, 0) / records.length;
+
+    const avgSpeed =
+        records.reduce((s, r) => s + (r.optimal / r.time), 0) / records.length;
+
+    const composite = avgSpeed / avgRatio;
+
+    fieldResult.innerHTML = `
+        <div style="font-size:0.7em; opacity:0.8">総合指数</div>
+        <div style="font-size:3.5em; margin-bottom:20px">
+            ${composite.toFixed(2)}
+        </div>
+
+        <div style="font-size:0.9em">
+            平均速度<br>
+            <span style="font-size:1.6em">${avgSpeed.toFixed(2)}</span>
+        </div>
+
+        <div style="margin-top:10px; font-size:0.9em">
+            距離比<br>
+            <span style="font-size:1.6em">${avgRatio.toFixed(2)}</span>
+        </div>
+
+        <div style="font-size:0.5em; margin-top:25px; opacity:0.7">
+            タップで再スタート
+        </div>
+    `;
+
+    fieldResult.style.display = "flex";
+
+    startOverlay.style.display = "flex";
+    startOverlay.textContent = "RESTART";
+}
+
+
+</script>
+
+</body>
+</html>

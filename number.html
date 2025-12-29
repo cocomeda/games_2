@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>1 to N タイムアタック</title>
+
+<style>
+body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    text-align: center;
+    background-color: #f0f2f5;
+    margin: 0;
+    padding: 20px;
+    user-select: none;
+}
+
+.container {
+    max-width: 650px;
+    margin: 0 auto;
+    padding: 20px;
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 0 10px;
+}
+
+.stats {
+    font-size: 1.4em;
+    font-weight: bold;
+}
+
+#timer {
+    color: #d32f2f;
+}
+
+.next-num {
+    font-size: 1.2em;
+    color: #007bff;
+}
+
+.settings {
+    margin-bottom: 10px;
+}
+
+.settings select {
+    font-size: 1em;
+    padding: 6px 10px;
+}
+
+/* グリッド（列数はJSで変更） */
+.number-grid {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 20px;
+    background: #eee;
+    padding: 10px;
+    border-radius: 10px;
+}
+
+.num-btn {
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    font-size: 1.4em;
+    font-weight: 900;
+    cursor: pointer;
+    transition: all 0.1s;
+}
+
+.num-btn:active {
+    transform: scale(0.9);
+}
+
+.num-btn.pressed {
+    background: #e0e0e0;
+    color: #bbb;
+    border-color: #eee;
+    cursor: default;
+}
+
+.num-btn.wrong {
+    background: #ff6b6b;
+    color: white;
+    border-color: #ff4c4c;
+}
+
+button.control-btn {
+    padding: 12px 30px;
+    font-size: 1.1em;
+    cursor: pointer;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+}
+
+#result-message {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255,255,255,0.95);
+    padding: 30px;
+    border-radius: 20px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.3);
+    display: none;
+    z-index: 100;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="settings">
+        マス数：
+        <select id="gridSizeSelect">
+            <option value="16">16 (4×4)</option>
+            <option value="25" selected>25 (5×5)</option>
+            <option value="36">36 (6×6)</option>
+            <option value="49">49 (7×7)</option>
+            <option value="64">64 (8×8)</option>
+            <option value="81">81 (9×9)</option>
+        </select>
+    </div>
+
+    <div class="header">
+        <div class="next-num">
+            Next: <span id="targetDisplay" style="font-weight:bold; font-size:1.4em;">1</span>
+        </div>
+        <div class="stats">
+            Time: <span id="timer">0.00</span>s
+        </div>
+    </div>
+
+    <div id="numberGrid" class="number-grid"></div>
+
+    <button class="control-btn" onclick="startGame()">リセット / 開始</button>
+</div>
+
+<div id="result-message">
+    <h2 id="finalTimeText"></h2>
+    <button class="control-btn" onclick="closeResult()">もう一度挑戦</button>
+</div>
+
+<script>
+let nextNumber = 1;
+let startTime;
+let timerInterval;
+let isGameActive = false;
+let MAX_NUMBER = 25;
+
+function startGame() {
+    const grid = document.getElementById('numberGrid');
+    const timerDisplay = document.getElementById('timer');
+    const targetDisplay = document.getElementById('targetDisplay');
+    const resultMsg = document.getElementById('result-message');
+    const sizeSelect = document.getElementById('gridSizeSelect');
+
+    MAX_NUMBER = parseInt(sizeSelect.value, 10);
+    const gridSize = Math.sqrt(MAX_NUMBER);
+
+    grid.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+
+    grid.innerHTML = '';
+    nextNumber = 1;
+    targetDisplay.textContent = nextNumber;
+    timerDisplay.textContent = '0.00';
+    resultMsg.style.display = 'none';
+    clearInterval(timerInterval);
+
+    let numbers = Array.from({ length: MAX_NUMBER }, (_, i) => i + 1);
+    numbers.sort(() => Math.random() - 0.5);
+
+    numbers.forEach(num => {
+        const btn = document.createElement('div');
+        btn.className = 'num-btn';
+        btn.textContent = num;
+        btn.id = `num-${num}`;
+
+        btn.addEventListener('touchstart', e => handleTouch(e, num));
+        btn.addEventListener('touchmove', e => handleTouch(e, num));
+        btn.addEventListener('mousedown', e => handleMouse(e, num));
+        btn.addEventListener('mousemove', e => handleMouse(e, num));
+
+        grid.appendChild(btn);
+    });
+
+    isGameActive = true;
+    startTime = Date.now();
+    timerInterval = setInterval(updateTimer, 10);
+}
+
+function handleTouch(e, num) {
+    if (!isGameActive) return;
+    const touch = e.touches[0];
+    const btn = document.getElementById(`num-${num}`);
+    const rect = btn.getBoundingClientRect();
+
+    if (
+        touch.clientX >= rect.left &&
+        touch.clientX <= rect.right &&
+        touch.clientY >= rect.top &&
+        touch.clientY <= rect.bottom
+    ) {
+        handleNumberClick(num);
+        e.preventDefault();
+    }
+}
+
+function handleMouse(e, num) {
+    if (!isGameActive) return;
+    if (e.buttons !== 1) return;
+    handleNumberClick(num);
+}
+
+function updateTimer() {
+    const diff = (Date.now() - startTime) / 1000;
+    document.getElementById('timer').textContent = diff.toFixed(2);
+}
+
+function handleNumberClick(num) {
+    if (!isGameActive) return;
+
+    const btn = document.getElementById(`num-${num}`);
+    if (btn.classList.contains('pressed')) return;
+
+    if (num === nextNumber) {
+        btn.classList.add('pressed');
+        if (nextNumber === MAX_NUMBER) {
+            finishGame();
+        } else {
+            nextNumber++;
+            document.getElementById('targetDisplay').textContent = nextNumber;
+        }
+    } else {
+        btn.classList.add('wrong');
+        setTimeout(() => btn.classList.remove('wrong'), 300);
+    }
+}
+
+function finishGame() {
+    isGameActive = false;
+    clearInterval(timerInterval);
+    const finalTime = document.getElementById('timer').textContent;
+    document.getElementById('finalTimeText').textContent =
+        `クリア！記録: ${finalTime}秒`;
+    document.getElementById('result-message').style.display = 'block';
+}
+
+function closeResult() {
+    document.getElementById('result-message').style.display = 'none';
+    startGame();
+}
+
+startGame();
+</script>
+
+</body>
+</html>

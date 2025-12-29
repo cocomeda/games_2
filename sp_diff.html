@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+ content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>間違い探し 20問チャレンジ</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: sans-serif;
+  background: #f0f0f0;
+  text-align: center;
+  user-select: none;
+}
+
+#status {
+  font-size: 20px;
+  font-weight: bold;
+  margin: 10px;
+}
+
+#game {
+  display: flex;
+  justify-content: space-between;
+  margin: 10px;
+}
+
+.field {
+  position: relative;
+  width: 48%;
+  height: 320px;
+  background: #fff;
+  border: 4px solid #333;
+}
+
+#divider { width: 4%; }
+
+.mark {
+  position: absolute;
+}
+
+.circle { border-radius: 50%; }
+.square {}
+.diamond { transform: rotate(45deg); }
+
+.triangle {
+  width: 0;
+  height: 0;
+  border-left: 12px solid transparent;
+  border-right: 12px solid transparent;
+  border-bottom: 24px solid;
+}
+
+.star {
+  clip-path: polygon(
+    50% 0%, 61% 35%, 98% 35%,
+    68% 57%, 79% 91%, 50% 70%,
+    21% 91%, 32% 57%, 2% 35%, 39% 35%
+  );
+}
+
+.highlight {
+  outline: 4px solid red;
+  outline-offset: 4px;
+  border-radius: 50%;
+}
+
+button {
+  width: 100%;
+  height: 70px;
+  font-size: 28px;
+  font-weight: bold;
+  border: none;
+}
+
+#sameBtn { background: #4CAF50; color: white; }
+#diffBtn { background: #F44336; color: white; }
+
+#overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  font-size: 36px;
+  z-index: 10;
+}
+
+#overlay button {
+  width: 80%;
+  margin-top: 20px;
+  font-size: 28px;
+}
+
+#overlay select {
+  font-size: 24px;
+  padding: 5px;
+  margin-top: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="status">待機中</div>
+
+<div id="game">
+  <div class="field" id="left"></div>
+  <div id="divider"></div>
+  <div class="field" id="right"></div>
+</div>
+
+<button id="sameBtn">同じ</button>
+<button id="diffBtn">違う</button>
+
+<div id="overlay">
+  <div id="overlayText"></div>
+  <div style="font-size:20px; margin-top:10px;">
+    マーク数：
+    <select id="countSelect">
+      <option>2</option>
+      <option>3</option>
+      <option selected>4</option>
+      <option>5</option>
+      <option>6</option>
+      <option>7</option>
+      <option>8</option>
+      <option>9</option>
+      <option>10</option>
+    </select>
+  </div>
+  <button id="startBtn">START</button>
+</div>
+
+<script>
+const SHAPES = ["circle","square","triangle","star","diamond"];
+const COLORS = ["red","blue","green","orange","purple"];
+const TOTAL = 20;
+const SIZE = 24;
+
+let COUNT = 6;
+let question, correct, startTime;
+let isSame;
+let diffIndex = null;
+let playing = false;
+
+const left = document.getElementById("left");
+const right = document.getElementById("right");
+const overlay = document.getElementById("overlay");
+const overlayText = document.getElementById("overlayText");
+const countSelect = document.getElementById("countSelect");
+
+function resetGame() {
+  COUNT = Number(countSelect.value);
+  question = 0;
+  correct = 0;
+  playing = true;
+  startTime = performance.now();
+  overlay.style.display = "none";
+  nextQuestion();
+}
+
+function randomPositions(n,w,h) {
+  const res = [];
+  const min = 40;
+  while (res.length < n) {
+    const x = Math.random()*(w-SIZE);
+    const y = Math.random()*(h-SIZE);
+    if (res.every(p=>Math.hypot(p.x-x,p.y-y)>min)) {
+      res.push({x,y});
+    }
+  }
+  return res;
+}
+
+function makeMark(data,pos) {
+  const d = document.createElement("div");
+  d.className = "mark " + data.shape;
+  d.style.left = pos.x+"px";
+  d.style.top = pos.y+"px";
+
+  if (data.shape==="triangle") {
+    d.style.borderBottomColor = data.color;
+  } else {
+    d.style.width = SIZE+"px";
+    d.style.height = SIZE+"px";
+    d.style.background = data.color;
+  }
+  return d;
+}
+
+function nextQuestion() {
+  question++;
+  document.getElementById("status").textContent =
+    `問題 ${question} / ${TOTAL}`;
+
+  left.innerHTML = "";
+  right.innerHTML = "";
+
+  isSame = Math.random()<0.5;
+  diffIndex = null;
+
+  const base = Array.from({length:COUNT},()=>({
+    shape: SHAPES[Math.floor(Math.random()*5)],
+    color: COLORS[Math.floor(Math.random()*5)]
+  }));
+
+  const rightData = base.map(o=>({...o}));
+
+  if (!isSame) {
+    diffIndex = Math.floor(Math.random()*COUNT);
+    rightData[diffIndex].color =
+      COLORS.filter(c=>c!==rightData[diffIndex].color)[0];
+  }
+
+  const pl = randomPositions(COUNT,left.clientWidth,left.clientHeight);
+  const pr = randomPositions(COUNT,right.clientWidth,right.clientHeight);
+
+  base.forEach((d,i)=>left.appendChild(makeMark(d,pl[i])));
+  rightData.forEach((d,i)=>right.appendChild(makeMark(d,pr[i])));
+}
+
+function showDifference() {
+  if (diffIndex===null) return;
+  left.children[diffIndex].classList.add("highlight");
+  right.children[diffIndex].classList.add("highlight");
+}
+
+function finish(text) {
+  playing = false;
+  overlayText.innerHTML = text;
+  overlay.style.display = "flex";
+  document.getElementById("startBtn").textContent = "RESTART";
+}
+
+function answer(val) {
+  if (!playing) return;
+
+  if (val===isSame) {
+    correct++;
+    if (correct>=TOTAL) {
+      const t=((performance.now()-startTime)/1000).toFixed(2);
+      finish(`CLEAR!<br>${t} 秒`);
+    } else {
+      nextQuestion();
+    }
+  } else {
+    showDifference();
+    finish(`GAME OVER<br>${correct} / ${TOTAL}`);
+  }
+}
+
+document.getElementById("sameBtn").onclick = ()=>answer(true);
+document.getElementById("diffBtn").onclick = ()=>answer(false);
+document.getElementById("startBtn").onclick = resetGame;
+</script>
+
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<link rel="icon" href="https://raw.githubusercontent.com/cocomeda/games_2/main/favicon.jpg" type="image/x-icon">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ゲームリスト</title>
+
+<style>
+body {
+    margin: 0;
+    font-family: sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #f5f5f5;
+}
+
+/* ボタン全体の並び */
+.button-container {
+    display: flex;
+    gap: 20px;
+}
+
+/* 正方形ボタン */
+.game-button {
+    width: 120px;
+    height: 120px;
+    background-color: black;
+    color: darkgray;
+    text-decoration: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 12px;
+    transition: transform 0.2s, background-color 0.2s;
+}
+
+/* ホバー時 */
+.game-button:hover {
+    background-color: gray;
+    transform: scale(1.05);
+}
+</style>
+</head>
+
+<body>
+
+<div class="button-container">
+    <a href="number.html" class="game-button">ゲームA</a>
+    <a href="sp_diff.html" class="game-button">ゲームB</a>
+    <a href="seek.html" class="game-button">ゲームC</a>
+</div>
+
+</body>
+</html>
+
+
+
+
+
+
