@@ -54,7 +54,6 @@ body {
     padding: 6px 10px;
 }
 
-/* グリッド（列数はJSで変更） */
 .number-grid {
     display: grid;
     gap: 8px;
@@ -72,7 +71,6 @@ body {
     background: white;
     border: 2px solid #ddd;
     border-radius: 8px;
-    font-size: 1.4em;
     font-weight: 900;
     cursor: pointer;
     transition: all 0.1s;
@@ -175,6 +173,17 @@ function startGame() {
 
     grid.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
 
+    // ▼ マス数ごとの最適フォントサイズ（ここを調整すればOK）
+    const fontSizeMap = {
+        4: 2.6,  // 16マス
+        5: 2.2,  // 25マス
+        6: 1.9,  // 36マス
+        7: 1.6,  // 49マス
+        8: 1.4,  // 64マス
+        9: 1.2   // 81マス
+    };
+    const fontSize = fontSizeMap[gridSize] || 1.4;
+
     grid.innerHTML = '';
     nextNumber = 1;
     targetDisplay.textContent = nextNumber;
@@ -190,6 +199,7 @@ function startGame() {
         btn.className = 'num-btn';
         btn.textContent = num;
         btn.id = `num-${num}`;
+        btn.style.fontSize = fontSize + 'em';
 
         btn.addEventListener('touchstart', e => handleTouch(e, num));
         btn.addEventListener('touchmove', e => handleTouch(e, num));
@@ -234,7 +244,6 @@ function updateTimer() {
 
 function handleNumberClick(num) {
     if (!isGameActive) return;
-
     const btn = document.getElementById(`num-${num}`);
     if (btn.classList.contains('pressed')) return;
 
