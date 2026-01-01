@@ -3,273 +3,206 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>左右判断ゲーム</title>
+<title>Number Side Game</title>
 
 <style>
 * {
     box-sizing: border-box;
+    margin: 0;
+    padding: 0;
 }
 
 body {
-    margin: 0;
-    font-family: sans-serif;
     height: 100vh;
-    overflow: hidden; /* ← スクロール完全禁止 */
+    overflow: hidden;
+    font-family: sans-serif;
     background: #f5f5f5;
+}
+
+/* 全体レイアウト */
+#game {
+    height: 100%;
     display: flex;
     flex-direction: column;
 }
 
-/* 目立たない設定 */
-#setting {
-    height: 28px;
-    padding: 4px 8px;
-    background: #eee;
+/* 設定（目立たせない） */
+#settings {
     text-align: right;
+    padding: 4px 8px;
     font-size: 12px;
 }
 
-#setting select {
-    font-size: 12px;
-    padding: 2px 4px;
-}
-
-/* 情報表示 */
-#info {
-    height: 32px;
-    text-align: center;
-    font-size: 16px;
-    line-height: 32px;
-    background: #ddd;
-}
-
-/* ゲームエリア */
-#game {
+/* 数字エリア */
+#field {
     flex: 1;
     display: flex;
-    position: relative;
-    min-height: 0;
 }
 
-.area {
+/* 左右エリア */
+.side {
     flex: 1;
     position: relative;
-    border: 1px solid #ccc;
-    background: white;
+    border: 1px solid #ddd;
 }
 
 /* 数字 */
 .number {
     position: absolute;
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
-    background: #fff;
+    background: white;
     border: 2px solid #333;
     display: flex;
-    align-items: center;
     justify-content: center;
-    font-size: 11px;
-    font-weight: bold;
-    user-select: none;
+    align-items: center;
+    font-size: 12px;
 }
 
-/* 中央メッセージ */
+/* 下部操作 */
+#controls {
+    padding: 6px;
+    display: flex;
+    justify-content: space-around;
+}
+
+.control-btn {
+    width: 45%;
+    height: 40px;
+    font-size: 16px;
+}
+
+/* リスタート */
+#restart {
+    height: 36px;
+    margin: 4px 8px;
+}
+
+/* メッセージ */
 #message {
     position: absolute;
     inset: 0;
     display: none;
-    align-items: center;
     justify-content: center;
-    font-size: 42px;
+    align-items: center;
+    font-size: 48px;
     font-weight: bold;
-    background: rgba(255,255,255,0.85);
+    background: rgba(255,255,255,0.9);
     z-index: 10;
-    text-align: center;
-}
-
-/* 左右ボタン */
-#controls {
-    height: 56px;
-    display: flex;
-    gap: 8px;
-    padding: 8px;
-}
-
-#controls button {
-    flex: 1;
-    font-size: 18px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-}
-
-#leftBtn { background: #4CAF50; color: white; }
-#rightBtn { background: #2196F3; color: white; }
-
-/* リスタート */
-#restartWrap {
-    height: 44px;
-    padding: 6px 8px;
-}
-
-#restartBtn {
-    width: 100%;
-    height: 100%;
-    font-size: 14px;
-    border: none;
-    border-radius: 8px;
-    background: #777;
-    color: white;
-    cursor: pointer;
+    flex-direction: column;
 }
 </style>
 </head>
 
 <body>
-
-<div id="setting">
-    最大数：
-    <select id="maxSelect">
-        <option value="10">10</option>
-        <option value="20">20</option>
-        <option value="30">30</option>
-        <option value="40">40</option>
-        <option value="50">50</option>
-        <option value="60">60</option>
-        <option value="70">70</option>
-        <option value="80">80</option>
-        <option value="90">90</option>
-        <option value="100" selected>100</option>
-        <option value="150">150</option>
-        <option value="200">200</option>
-    </select>
-</div>
-
-<div id="info">次は：1</div>
-
 <div id="game">
-    <div class="area" id="leftArea"></div>
-    <div class="area" id="rightArea"></div>
-    <div id="message"></div>
+
+    <div id="settings">
+        最大数：
+        <select id="maxNumber">
+            <option>10</option>
+            <option>20</option>
+            <option>30</option>
+            <option>40</option>
+            <option>50</option>
+            <option>60</option>
+            <option>70</option>
+            <option>80</option>
+            <option>90</option>
+            <option selected>100</option>
+        </select>
+    </div>
+
+    <div id="field">
+        <div class="side" id="left"></div>
+        <div class="side" id="right"></div>
+    </div>
+
+    <div id="controls">
+        <button class="control-btn" onclick="press('left')">左</button>
+        <button class="control-btn" onclick="press('right')">右</button>
+    </div>
+
+    <button id="restart" onclick="start()">RESTART</button>
 </div>
 
-<div id="controls">
-    <button id="leftBtn">LEFT</button>
-    <button id="rightBtn">RIGHT</button>
-</div>
-
-<div id="restartWrap">
-    <button id="restartBtn">RESTART</button>
-</div>
+<div id="message"></div>
 
 <script>
-const leftArea = document.getElementById("leftArea");
-const rightArea = document.getElementById("rightArea");
-const info = document.getElementById("info");
-const message = document.getElementById("message");
-const maxSelect = document.getElementById("maxSelect");
-
+let numbers = [];
 let current = 1;
-let maxNumber = 100;
 let startTime;
-let gameEnd = false;
 
-const SIZE = 32;
-const GAP = 6;
-
-function shuffle(arr) {
-    for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-}
-
-function placeNumber(area, num, placed) {
-    for (let i = 0; i < 150; i++) {
-        const x = Math.random() * (area.clientWidth - SIZE);
-        const y = Math.random() * (area.clientHeight - SIZE);
-
-        const ok = placed.every(p =>
-            Math.abs(p.x - x) > SIZE + GAP ||
-            Math.abs(p.y - y) > SIZE + GAP
-        );
-
-        if (ok) {
-            const div = document.createElement("div");
-            div.className = "number";
-            div.textContent = num;
-            div.style.left = x + "px";
-            div.style.top = y + "px";
-            area.appendChild(div);
-            placed.push({ x, y });
-            return;
-        }
-    }
-}
-
-function startGame() {
-    leftArea.innerHTML = "";
-    rightArea.innerHTML = "";
-    message.style.display = "none";
+function start() {
+    document.getElementById("message").style.display = "none";
+    document.getElementById("left").innerHTML = "";
+    document.getElementById("right").innerHTML = "";
 
     current = 1;
-    gameEnd = false;
+    const max = Number(document.getElementById("maxNumber").value);
     startTime = Date.now();
 
-    maxNumber = Number(maxSelect.value);
-    info.textContent = `次は：1 / ${maxNumber}`;
+    numbers = [];
+    for (let i = 1; i <= max; i++) {
+        numbers.push({
+            value: i,
+            side: Math.random() < 0.5 ? "left" : "right"
+        });
+    }
 
-    const nums = Array.from({ length: maxNumber }, (_, i) => i + 1);
-    shuffle(nums);
-
-    const half = Math.ceil(nums.length / 2);
-    const leftNums = nums.slice(0, half);
-    const rightNums = nums.slice(half);
-
-    let placedLeft = [];
-    let placedRight = [];
-
-    leftNums.forEach(n => placeNumber(leftArea, n, placedLeft));
-    rightNums.forEach(n => placeNumber(rightArea, n, placedRight));
+    numbers.forEach(n => placeNumber(n));
 }
 
-function check(side) {
-    if (gameEnd) return;
+function placeNumber(n) {
+    const area = document.getElementById(n.side);
+    const div = document.createElement("div");
+    div.className = "number";
+    div.textContent = n.value;
 
-    const leftEl = [...leftArea.children].find(el => Number(el.textContent) === current);
-    const rightEl = [...rightArea.children].find(el => Number(el.textContent) === current);
+    let x, y, ok;
+    do {
+        ok = true;
+        x = Math.random() * (area.clientWidth - 36);
+        y = Math.random() * (area.clientHeight - 36);
+        area.querySelectorAll(".number").forEach(el => {
+            const dx = el.offsetLeft - x;
+            const dy = el.offsetTop - y;
+            if (Math.hypot(dx, dy) < 36) ok = false;
+        });
+    } while (!ok);
 
-    const correctSide = leftEl ? "left" : "right";
+    div.style.left = x + "px";
+    div.style.top = y + "px";
+    area.appendChild(div);
+}
 
-    if (side !== correctSide) {
-        message.textContent = "GAME OVER";
-        message.style.display = "flex";
-        gameEnd = true;
+function press(side) {
+    const target = numbers.find(n => n.value === current);
+    if (!target || target.side !== side) {
+        end("GAME OVER");
         return;
     }
 
-    (leftEl || rightEl).remove();
-    current++;
+    const area = document.getElementById(side);
+    [...area.children].forEach(el => {
+        if (Number(el.textContent) === current) el.remove();
+    });
 
-    if (current > maxNumber) {
+    current++;
+    if (current > numbers.length) {
         const time = ((Date.now() - startTime) / 1000).toFixed(2);
-        message.textContent = `CLEAR\n${time}s`;
-        message.style.whiteSpace = "pre-line";
-        message.style.display = "flex";
-        gameEnd = true;
-    } else {
-        info.textContent = `次は：${current} / ${maxNumber}`;
+        end("CLEAR<br>" + time + "s");
     }
 }
 
-document.getElementById("leftBtn").onclick = () => check("left");
-document.getElementById("rightBtn").onclick = () => check("right");
-document.getElementById("restartBtn").onclick = startGame;
-maxSelect.onchange = startGame;
+function end(text) {
+    const msg = document.getElementById("message");
+    msg.innerHTML = text;
+    msg.style.display = "flex";
+}
 
-startGame();
+start();
 </script>
-
 </body>
 </html>
