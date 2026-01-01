@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Number Side Game</title>
+<title>左右判断ゲーム</title>
 
 <style>
 * {
@@ -17,137 +17,178 @@ body {
     overflow: hidden;
     font-family: sans-serif;
     background: #f5f5f5;
-}
-
-/* 全体レイアウト */
-#game {
-    height: 100%;
     display: flex;
     flex-direction: column;
 }
 
-/* 設定（目立たせない） */
-#settings {
-    text-align: right;
+/* 設定（目立たない） */
+#setting {
+    height: 28px;
     padding: 4px 8px;
+    text-align: right;
     font-size: 12px;
+    background: #eee;
 }
 
-/* 数字エリア */
-#field {
+/* 情報 */
+#info {
+    height: 32px;
+    text-align: center;
+    line-height: 32px;
+    background: #ddd;
+    font-size: 16px;
+}
+
+/* ゲームエリア */
+#game {
     flex: 1;
     display: flex;
+    position: relative;
+    min-height: 0;
 }
 
-/* 左右エリア */
-.side {
+.area {
     flex: 1;
     position: relative;
-    border: 1px solid #ddd;
+    border: 1px solid #ccc;
+    background: white;
 }
 
 /* 数字 */
 .number {
     position: absolute;
-    width: 34px;
-    height: 34px;
     border-radius: 50%;
     background: white;
     border: 2px solid #333;
     display: flex;
-    justify-content: center;
     align-items: center;
-    font-size: 12px;
+    justify-content: center;
+    font-weight: bold;
+    user-select: none;
 }
 
-/* 下部操作 */
-#controls {
-    padding: 6px;
-    display: flex;
-    justify-content: space-around;
-}
-
-.control-btn {
-    width: 45%;
-    height: 40px;
-    font-size: 16px;
-}
-
-/* リスタート */
-#restart {
-    height: 36px;
-    margin: 4px 8px;
-}
-
-/* メッセージ */
+/* 中央メッセージ */
 #message {
     position: absolute;
     inset: 0;
     display: none;
-    justify-content: center;
     align-items: center;
-    font-size: 48px;
+    justify-content: center;
+    font-size: 44px;
     font-weight: bold;
     background: rgba(255,255,255,0.9);
     z-index: 10;
-    flex-direction: column;
+    text-align: center;
+}
+
+/* 左右ボタン */
+#controls {
+    height: 56px;
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+}
+
+#controls button {
+    flex: 1;
+    font-size: 18px;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+}
+
+#leftBtn { background: #4CAF50; }
+#rightBtn { background: #2196F3; }
+
+/* リスタート */
+#restartWrap {
+    height: 44px;
+    padding: 6px 8px;
+}
+
+#restartBtn {
+    width: 100%;
+    height: 100%;
+    font-size: 14px;
+    border: none;
+    border-radius: 8px;
+    background: #777;
+    color: white;
+    cursor: pointer;
 }
 </style>
 </head>
 
 <body>
-<div id="game">
 
-    <div id="settings">
-        最大数：
-        <select id="maxNumber">
-            <option>10</option>
-            <option>20</option>
-            <option>30</option>
-            <option>40</option>
-            <option>50</option>
-            <option>60</option>
-            <option>70</option>
-            <option>80</option>
-            <option>90</option>
-            <option selected>100</option>
-        </select>
-    </div>
-
-    <div id="field">
-        <div class="side" id="left"></div>
-        <div class="side" id="right"></div>
-    </div>
-
-    <div id="controls">
-        <button class="control-btn" onclick="press('left')">左</button>
-        <button class="control-btn" onclick="press('right')">右</button>
-    </div>
-
-    <button id="restart" onclick="start()">RESTART</button>
+<div id="setting">
+    最大数：
+    <select id="maxSelect">
+        <option>10</option>
+        <option>20</option>
+        <option>30</option>
+        <option>40</option>
+        <option>50</option>
+        <option>60</option>
+        <option>70</option>
+        <option>80</option>
+        <option>90</option>
+        <option selected>100</option>
+        <option>150</option>
+        <option>200</option>
+    </select>
 </div>
 
-<div id="message"></div>
+<div id="info">次は：1</div>
+
+<div id="game">
+    <div class="area" id="leftArea"></div>
+    <div class="area" id="rightArea"></div>
+    <div id="message"></div>
+</div>
+
+<div id="controls">
+    <button id="leftBtn">LEFT</button>
+    <button id="rightBtn">RIGHT</button>
+</div>
+
+<div id="restartWrap">
+    <button id="restartBtn">RESTART</button>
+</div>
 
 <script>
 let numbers = [];
 let current = 1;
 let startTime;
+let circleSize = 30;
+
+/* 最大数に応じて円サイズ調整 */
+function calcCircleSize(max) {
+    if (max <= 30) return 40;
+    if (max <= 50) return 34;
+    if (max <= 70) return 28;
+    if (max <= 100) return 24;
+    return 20;
+}
 
 function start() {
     document.getElementById("message").style.display = "none";
-    document.getElementById("left").innerHTML = "";
-    document.getElementById("right").innerHTML = "";
+    document.getElementById("leftArea").innerHTML = "";
+    document.getElementById("rightArea").innerHTML = "";
 
     current = 1;
-    const max = Number(document.getElementById("maxNumber").value);
+    document.getElementById("info").textContent = "次は：" + current;
+
+    const max = Number(document.getElementById("maxSelect").value);
+    circleSize = calcCircleSize(max);
     startTime = Date.now();
 
     numbers = [];
     for (let i = 1; i <= max; i++) {
         numbers.push({
             value: i,
-            side: Math.random() < 0.5 ? "left" : "right"
+            side: Math.random() < 0.5 ? "leftArea" : "rightArea"
         });
     }
 
@@ -160,16 +201,24 @@ function placeNumber(n) {
     div.className = "number";
     div.textContent = n.value;
 
-    let x, y, ok;
+    div.style.width = circleSize + "px";
+    div.style.height = circleSize + "px";
+    div.style.fontSize = Math.max(10, circleSize / 2.2) + "px";
+
+    let x, y, ok, tries = 0;
     do {
         ok = true;
-        x = Math.random() * (area.clientWidth - 36);
-        y = Math.random() * (area.clientHeight - 36);
+        x = Math.random() * (area.clientWidth - circleSize);
+        y = Math.random() * (area.clientHeight - circleSize);
+
         area.querySelectorAll(".number").forEach(el => {
             const dx = el.offsetLeft - x;
             const dy = el.offsetTop - y;
-            if (Math.hypot(dx, dy) < 36) ok = false;
+            if (Math.hypot(dx, dy) < circleSize) ok = false;
         });
+
+        tries++;
+        if (tries > 500) break;
     } while (!ok);
 
     div.style.left = x + "px";
@@ -184,12 +233,13 @@ function press(side) {
         return;
     }
 
-    const area = document.getElementById(side);
-    [...area.children].forEach(el => {
+    document.querySelectorAll(".number").forEach(el => {
         if (Number(el.textContent) === current) el.remove();
     });
 
     current++;
+    document.getElementById("info").textContent = "次は：" + current;
+
     if (current > numbers.length) {
         const time = ((Date.now() - startTime) / 1000).toFixed(2);
         end("CLEAR<br>" + time + "s");
@@ -202,7 +252,14 @@ function end(text) {
     msg.style.display = "flex";
 }
 
+/* ボタンイベント */
+document.getElementById("leftBtn").onclick = () => press("leftArea");
+document.getElementById("rightBtn").onclick = () => press("rightArea");
+document.getElementById("restartBtn").onclick = start;
+document.getElementById("maxSelect").onchange = start;
+
 start();
 </script>
+
 </body>
 </html>
