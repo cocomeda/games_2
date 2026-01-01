@@ -15,9 +15,30 @@ body {
     height: 100vh;
 }
 
+/* 目立たない設定UI */
+#setting {
+    padding: 4px 8px;
+    background: #eee;
+    text-align: right;
+    font-size: 12px;
+}
+
+#setting select {
+    font-size: 12px;
+    padding: 2px 4px;
+}
+
+#info {
+    text-align: center;
+    padding: 6px;
+    font-size: 18px;
+    background: #ddd;
+}
+
 #game {
     flex: 1;
     display: flex;
+    position: relative;
 }
 
 .area {
@@ -29,16 +50,30 @@ body {
 
 .number {
     position: absolute;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 12px;
     font-weight: bold;
     user-select: none;
 }
 
-#info {
+#message {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    font-weight: bold;
+    background: rgba(255,255,255,0.85);
+    z-index: 10;
     text-align: center;
-    padding: 8px;
-    font-size: 18px;
-    background: #eee;
 }
 
 #controls {
@@ -47,10 +82,10 @@ body {
     padding: 10px;
 }
 
-button {
+#controls button {
     flex: 1;
     font-size: 18px;
-    padding: 12px;
+    padding: 14px;
     border: none;
     border-radius: 8px;
     cursor: pointer;
@@ -58,22 +93,66 @@ button {
 
 #leftBtn { background: #4CAF50; color: white; }
 #rightBtn { background: #2196F3; color: white; }
-#restartBtn { background: #777; color: white; }
+
+#restartWrap {
+    padding: 10px;
+}
+
+#restartBtn {
+    width: 100%;
+    font-size: 14px;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: #777;
+    color: white;
+    cursor: pointer;
+}
 </style>
 </head>
 
 <body>
+
+<div id="setting">
+    最大数：
+    <select id="maxSelect">
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="30">30</option>
+        <option value="40">40</option>
+        <option value="50">50</option>
+        <option value="60">60</option>
+        <option value="70">70</option>
+        <option value="80">80</option>
+        <option value="90">90</option>
+        <option value="100" selected>100</option>
+        <option value="110">110</option>
+        <option value="120">120</option>
+        <option value="130">130</option>
+        <option value="140">140</option>
+        <option value="150">150</option>
+        <option value="160">160</option>
+        <option value="170">170</option>
+        <option value="180">180</option>
+        <option value="190">190</option>
+        <option value="200">200</option>
+    </select>
+</div>
 
 <div id="info">次は：1</div>
 
 <div id="game">
     <div class="area" id="leftArea"></div>
     <div class="area" id="rightArea"></div>
+    <div id="message"></div>
 </div>
 
 <div id="controls">
     <button id="leftBtn">LEFT</button>
     <button id="rightBtn">RIGHT</button>
+</div>
+
+<div id="restartWrap">
     <button id="restartBtn">RESTART</button>
 </div>
 
@@ -81,91 +160,115 @@ button {
 const leftArea = document.getElementById("leftArea");
 const rightArea = document.getElementById("rightArea");
 const info = document.getElementById("info");
+const message = document.getElementById("message");
+const maxSelect = document.getElementById("maxSelect");
 
-let numbers = [];
 let current = 1;
+let maxNumber = 100;
 let startTime;
-let gameOver = false;
+let gameEnd = false;
 
-function shuffle(array) {
-    for (let i = array.length - 1; i > 0; i--) {
+const SIZE = 34;
+const GAP = 6;
+
+function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
+        [arr[i], arr[j]] = [arr[j], arr[i]];
     }
 }
 
-function randomPosition(area) {
-    const x = Math.random() * (area.clientWidth - 30);
-    const y = Math.random() * (area.clientHeight - 20);
-    return { x, y };
+function placeNumber(area, num, placed) {
+    for (let i = 0; i < 150; i++) {
+        const x = Math.random() * (area.clientWidth - SIZE);
+        const y = Math.random() * (area.clientHeight - SIZE);
+
+        const ok = placed.every(p =>
+            Math.abs(p.x - x) > SIZE + GAP ||
+            Math.abs(p.y - y) > SIZE + GAP
+        );
+
+        if (ok) {
+            const div = document.createElement("div");
+            div.className = "number";
+            div.textContent = num;
+            div.style.left = x + "px";
+            div.style.top = y + "px";
+            area.appendChild(div);
+            placed.push({ x, y });
+            return;
+        }
+    }
 }
 
-function createGame() {
+function startGame() {
     leftArea.innerHTML = "";
     rightArea.innerHTML = "";
-    info.textContent = "次は：1";
+    message.style.display = "none";
 
     current = 1;
-    gameOver = false;
+    gameEnd = false;
     startTime = Date.now();
 
-    numbers = Array.from({ length: 100 }, (_, i) => i + 1);
-    shuffle(numbers);
+    maxNumber = Number(maxSelect.value);
+    info.textContent = `次は：1 / ${maxNumber}`;
 
-    const leftNums = numbers.slice(0, 50);
-    const rightNums = numbers.slice(50);
+    const nums = Array.from({ length: maxNumber }, (_, i) => i + 1);
+    shuffle(nums);
 
-    leftNums.forEach(n => {
-        const div = document.createElement("div");
-        div.className = "number";
-        div.textContent = n;
-        const pos = randomPosition(leftArea);
-        div.style.left = pos.x + "px";
-        div.style.top = pos.y + "px";
-        leftArea.appendChild(div);
-    });
+    const half = Math.ceil(nums.length / 2);
+    const leftNums = nums.slice(0, half);
+    const rightNums = nums.slice(half);
 
-    rightNums.forEach(n => {
-        const div = document.createElement("div");
-        div.className = "number";
-        div.textContent = n;
-        const pos = randomPosition(rightArea);
-        div.style.left = pos.x + "px";
-        div.style.top = pos.y + "px";
-        rightArea.appendChild(div);
-    });
+    let placedLeft = [];
+    let placedRight = [];
+
+    leftNums.forEach(n => placeNumber(leftArea, n, placedLeft));
+    rightNums.forEach(n => placeNumber(rightArea, n, placedRight));
 }
 
-function checkAnswer(side) {
-    if (gameOver) return;
+function check(side) {
+    if (gameEnd) return;
 
-    const correctSide = [...leftArea.children].some(
+    const leftEl = [...leftArea.children].find(
         el => Number(el.textContent) === current
-    ) ? "left" : "right";
+    );
+    const rightEl = [...rightArea.children].find(
+        el => Number(el.textContent) === current
+    );
+
+    const correctSide = leftEl ? "left" : "right";
 
     if (side !== correctSide) {
-        info.textContent = "❌ GAME OVER";
-        gameOver = true;
+        message.textContent = "GAME OVER";
+        message.style.display = "flex";
+        gameEnd = true;
         return;
     }
 
+    (leftEl || rightEl).remove();
     current++;
 
-    if (current > 100) {
+    if (current > maxNumber) {
         const time = ((Date.now() - startTime) / 1000).toFixed(2);
-        info.textContent = `🎉 CLEAR！ ${time} 秒`;
-        gameOver = true;
+        message.textContent = `CLEAR\n${time}s`;
+        message.style.whiteSpace = "pre-line";
+        message.style.display = "flex";
+        gameEnd = true;
     } else {
-        info.textContent = `次は：${current}`;
+        info.textContent = `次は：${current} / ${maxNumber}`;
     }
 }
 
-document.getElementById("leftBtn").onclick = () => checkAnswer("left");
-document.getElementById("rightBtn").onclick = () => checkAnswer("right");
-document.getElementById("restartBtn").onclick = createGame;
+document.getElementById("leftBtn").onclick = () => check("left");
+document.getElementById("rightBtn").onclick = () => check("right");
+document.getElementById("restartBtn").onclick = startGame;
+
+// 変更したら即リスタート（目立たせないUX）
+maxSelect.onchange = startGame;
 
 // 初期化
-createGame();
+startGame();
 </script>
 
 </body>
