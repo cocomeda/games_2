@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>瞬間記憶タイムアタック</title>
+
+<style>
+body { 
+    font-family: 'Helvetica Neue', Arial, sans-serif; 
+    text-align: center; 
+    background-color: #2c3e50; 
+    color: white; 
+    margin: 0; 
+    padding: 20px; 
+    user-select: none; 
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    overflow: hidden; 
+}
+
+.container { max-width: 500px; margin: 0 auto; }
+h1 { font-size: 1.5em; margin-bottom: 10px; }
+.stats { font-size: 1.2em; margin-bottom: 10px; font-weight: bold; }
+#timer { color: #f1c40f; }
+#instruction { height: 1.2em; color: #bdc3c7; margin-bottom: 10px; }
+
+.game-board { 
+    display: grid; 
+    grid-template-columns: repeat(10, 1fr); 
+    gap: 4px; 
+    background: #34495e;
+    padding: 8px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    touch-action: none;
+}
+
+.cell { 
+    aspect-ratio: 1 / 1;
+    background: #ecf0f1;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2em;
+    font-weight: 900; 
+    color: #2c3e50;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.cell.hidden { color: transparent !important; background: #95a5a6; }
+.cell.cleared { visibility: hidden; }
+
+.cell.wrong { 
+    background: #e74c3c !important; 
+    color: white !important; 
+    box-shadow: 0 0 10px red;
+    z-index: 10;
+}
+
+/* ★正解だったはずのセル */
+.cell.correct-hint {
+    background: #3498db !important;
+    color: white !important;
+    box-shadow: 0 0 12px #5dade2;
+    z-index: 9;
+}
+
+.start-btn { 
+    padding: 15px 40px; 
+    font-size: 1.2em; 
+    cursor: pointer; 
+    background: #27ae60; 
+    color: white; 
+    border: none; 
+    border-radius: 50px; 
+    font-weight: bold;
+    box-shadow: 0 4px #1e8449;
+}
+.start-btn:active { transform: translateY(2px); box-shadow: 0 2px #1e8449; }
+
+#overlay {
+    position: fixed; 
+    top: 0; left: 0; 
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85); 
+    display: none; 
+    flex-direction: column;
+    align-items: center; 
+    justify-content: center; 
+    z-index: 100;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <h1>瞬間記憶テスト</h1>
+    <div class="stats">Time: <span id="timer">0.00</span>s</div>
+    <div id="instruction">ボタンを押して開始！</div>
+    <div id="gameBoard" class="game-board"></div>
+    <button class="start-btn" onclick="initGame()">ゲーム開始</button>
+</div>
+
+<div id="overlay">
+    <h2 id="resultTitle">RESULT</h2>
+    <p id="resultTime" style="font-size: 2em; font-weight: bold; margin: 20px 0;"></p>
+    <button class="start-btn" onclick="initGame()">もう一度挑戦</button>
+</div>
+
+<script>
+const BOARD_SIZE = 100;
+const NUM_COUNT = 7;
+const MEMORY_TIME = 3000;
+
+let nextNumber = 1;
+let startTime = 0;
+let timerInterval = null;
+let isClickable = false;
+let finalTime = 0;
+
+function initGame() {
+    const board = document.getElementById('gameBoard');
+    const instruction = document.getElementById('instruction');
+    const overlay = document.getElementById('overlay');
+
+    board.innerHTML = '';
+    overlay.style.display = 'none';
+    nextNumber = 1;
+    isClickable = false;
+    finalTime = 0;
+
+    clearInterval(timerInterval);
+    document.getElementById('timer').textContent = '0.00';
+
+    let positions = Array.from({length: BOARD_SIZE}, (_, i) => i);
+    positions.sort(() => Math.random() - 0.5);
+
+    let map = {};
+    for (let i = 1; i <= NUM_COUNT; i++) {
+        map[positions[i - 1]] = i;
+    }
+
+    for (let i = 0; i < BOARD_SIZE; i++) {
+        const div = document.createElement('div');
+        div.className = 'cell';
+
+        if (map[i]) {
+            const val = map[i];
+            div.textContent = val;
+            div.id = `num-${val}`;
+            div.onclick = () => handleCellClick(val, div);
+        } else {
+            div.style.background = 'transparent';
+            div.style.cursor = 'default';
+        }
+        board.appendChild(div);
+    }
+
+    instruction.textContent = "数字を覚えてください...";
+
+    setTimeout(() => {
+        document.querySelectorAll('.cell').forEach(el => {
+            if (el.textContent) el.classList.add('hidden');
+        });
+
+        instruction.textContent = "1から順に叩け！";
+        isClickable = true;
+        startTime = Date.now();
+
+        timerInterval = setInterval(updateTimer, 10);
+    }, MEMORY_TIME);
+}
+
+function updateTimer() {
+    const t = (Date.now() - startTime) / 1000;
+    document.getElementById('timer').textContent = t.toFixed(2);
+}
+
+function handleCellClick(num, element) {
+    if (!isClickable) return;
+
+    if (num === nextNumber) {
+        element.classList.remove('hidden');
+        element.classList.add('cleared');
+
+        if (nextNumber === NUM_COUNT) {
+            // ★最後のタップ瞬間でタイム確定
+            finalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+            finishGame(true);
+        } else {
+            nextNumber++;
+        }
+    } else {
+        element.classList.remove('hidden');
+        element.classList.add('wrong');
+
+        // ★正解だったはずの次の数字を表示
+        const correct = document.getElementById(`num-${nextNumber}`);
+        if (correct) {
+            correct.classList.remove('hidden');
+            correct.classList.add('correct-hint');
+        }
+
+        finishGame(false);
+    }
+}
+
+function finishGame(success) {
+    isClickable = false;
+    clearInterval(timerInterval);
+
+    const overlay = document.getElementById('overlay');
+    const title = document.getElementById('resultTitle');
+    const time = document.getElementById('resultTime');
+
+    // 全数字を表示（答え合わせ）
+    document.querySelectorAll('.cell').forEach(el => {
+        if (el.textContent) el.classList.remove('hidden');
+    });
+
+    setTimeout(() => {
+        overlay.style.display = 'flex';
+
+        if (success) {
+            title.textContent = "記憶完了！";
+            title.style.color = "#2ecc71";
+            time.textContent = finalTime + "s";
+        } else {
+            title.textContent = "ミス！";
+            title.style.color = "#e74c3c";
+            time.textContent = "次は頑張りましょう";
+        }
+    }, 800);
+}
+
+/* ズーム防止 */
+document.addEventListener('touchstart', e => {
+    if (e.touches.length > 1) e.preventDefault();
+}, { passive: false });
+
+let lastTouchEnd = 0;
+document.addEventListener('touchend', e => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) e.preventDefault();
+    lastTouchEnd = now;
+}, false);
+</script>
+
+</body>
+</html>
