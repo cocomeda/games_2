@@ -15,6 +15,9 @@
 body {
     font-family: sans-serif;
     background: #f5f5f5;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
 }
 
@@ -35,10 +38,9 @@ body {
     font-size: 16px;
 }
 
-/* ===== ゲームエリア ===== */
-/* 下部UIの高さを引いて固定 */
+/* ===== ゲーム ===== */
 #game {
-    height: calc(85vh - 28px - 32px - 56px - 44px);
+    flex: 1;
     display: flex;
     position: relative;
 }
@@ -63,28 +65,26 @@ body {
     user-select: none;
 }
 
-/* ===== 中央メッセージ ===== */
+/* ===== メッセージ ===== */
 #message {
     position: absolute;
     inset: 0;
     display: none;
     align-items: center;
     justify-content: center;
-    font-size: 44px;
+    font-size: 40px;
     font-weight: bold;
     background: rgba(255,255,255,0.9);
     z-index: 10;
     text-align: center;
 }
 
-/* ===== 下部ボタン ===== */
+/* ===== 操作 ===== */
 #controls {
-    height: 6vh;
+    height: 56px;
     display: flex;
     gap: 8px;
     padding: 8px;
-    position: relative;
-    z-index: 5;
 }
 
 #controls button {
@@ -102,8 +102,6 @@ body {
 #restartWrap {
     height: 44px;
     padding: 6px 8px;
-    position: relative;
-    z-index: 5;
 }
 
 #restartBtn {
@@ -121,21 +119,21 @@ body {
 <body>
 
 <div id="setting">
-    最大数：
-    <select id="maxSelect">
-        <option>10</option>
-        <option>20</option>
-        <option>30</option>
-        <option>40</option>
-        <option>50</option>
-        <option>60</option>
-        <option>70</option>
-        <option>80</option>
-        <option>90</option>
-        <option selected>100</option>
-        <option>150</option>
-        <option>200</option>
-    </select>
+最大数：
+<select id="maxSelect">
+    <option>10</option>
+    <option>20</option>
+    <option>30</option>
+    <option>40</option>
+    <option>50</option>
+    <option>60</option>
+    <option>70</option>
+    <option>80</option>
+    <option>90</option>
+    <option selected>100</option>
+    <option>150</option>
+    <option>200</option>
+</select>
 </div>
 
 <div id="info">次は：1</div>
@@ -160,8 +158,9 @@ let numbers = [];
 let current = 1;
 let startTime;
 let circleSize = 30;
+let playing = false;
 
-/* 数字サイズを最大数で調整 */
+/* サイズ調整 */
 function calcCircleSize(max) {
     if (max <= 30) return 55;
     if (max <= 50) return 50;
@@ -171,23 +170,29 @@ function calcCircleSize(max) {
 }
 
 function start() {
+    playing = true;
     document.getElementById("message").style.display = "none";
-    document.getElementById("leftArea").innerHTML = "";
-    document.getElementById("rightArea").innerHTML = "";
+    leftArea.innerHTML = "";
+    rightArea.innerHTML = "";
 
     current = 1;
-    document.getElementById("info").textContent = "次は：" + current;
+    info.textContent = "次は：" + current;
 
-    const max = Number(document.getElementById("maxSelect").value);
+    const max = Number(maxSelect.value);
     circleSize = calcCircleSize(max);
     startTime = Date.now();
 
     numbers = [];
+
+    /* 半分ずつ */
+    let sides = [];
+    for (let i = 0; i < max; i++) {
+        sides.push(i < max / 2 ? "leftArea" : "rightArea");
+    }
+    sides.sort(() => Math.random() - 0.5);
+
     for (let i = 1; i <= max; i++) {
-        numbers.push({
-            value: i,
-            side: Math.random() < 0.5 ? "leftArea" : "rightArea"
-        });
+        numbers.push({ value: i, side: sides[i - 1] });
     }
 
     numbers.forEach(placeNumber);
@@ -225,6 +230,8 @@ function placeNumber(n) {
 }
 
 function press(side) {
+    if (!playing) return;
+
     const target = numbers.find(n => n.value === current);
     if (!target || target.side !== side) {
         end("GAME OVER");
@@ -236,7 +243,7 @@ function press(side) {
     });
 
     current++;
-    document.getElementById("info").textContent = "次は：" + current;
+    info.textContent = "次は：" + current;
 
     if (current > numbers.length) {
         const time = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -245,9 +252,9 @@ function press(side) {
 }
 
 function end(text) {
-    const msg = document.getElementById("message");
-    msg.innerHTML = text;
-    msg.style.display = "flex";
+    playing = false;
+    message.innerHTML = text;
+    message.style.display = "flex";
 }
 
 /* イベント */
