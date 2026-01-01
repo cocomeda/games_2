@@ -13,48 +13,44 @@
 }
 
 body {
-    height: 100vh;
-    overflow: hidden;
     font-family: sans-serif;
     background: #f5f5f5;
-    display: flex;
-    flex-direction: column;
+    overflow: hidden;
 }
 
-/* 設定（目立たない） */
+/* ===== 上部 ===== */
 #setting {
     height: 28px;
     padding: 4px 8px;
-    text-align: right;
     font-size: 12px;
     background: #eee;
+    text-align: right;
 }
 
-/* 情報 */
 #info {
     height: 32px;
-    text-align: center;
     line-height: 32px;
+    text-align: center;
     background: #ddd;
     font-size: 16px;
 }
 
-/* ゲームエリア */
+/* ===== ゲームエリア ===== */
+/* 下部UIの高さを引いて固定 */
 #game {
-    flex: 1;
+    height: calc(100vh - 28px - 32px - 56px - 44px);
     display: flex;
     position: relative;
-    min-height: 0;
 }
 
 .area {
     flex: 1;
     position: relative;
-    border: 1px solid #ccc;
     background: white;
+    border: 1px solid #ccc;
 }
 
-/* 数字 */
+/* ===== 数字 ===== */
 .number {
     position: absolute;
     border-radius: 50%;
@@ -67,7 +63,7 @@ body {
     user-select: none;
 }
 
-/* 中央メッセージ */
+/* ===== 中央メッセージ ===== */
 #message {
     position: absolute;
     inset: 0;
@@ -81,12 +77,14 @@ body {
     text-align: center;
 }
 
-/* 左右ボタン */
+/* ===== 下部ボタン ===== */
 #controls {
     height: 56px;
     display: flex;
     gap: 8px;
     padding: 8px;
+    position: relative;
+    z-index: 5;
 }
 
 #controls button {
@@ -95,16 +93,17 @@ body {
     border: none;
     border-radius: 8px;
     color: white;
-    cursor: pointer;
 }
 
 #leftBtn { background: #4CAF50; }
 #rightBtn { background: #2196F3; }
 
-/* リスタート */
+/* ===== リスタート ===== */
 #restartWrap {
     height: 44px;
     padding: 6px 8px;
+    position: relative;
+    z-index: 5;
 }
 
 #restartBtn {
@@ -115,7 +114,6 @@ body {
     border-radius: 8px;
     background: #777;
     color: white;
-    cursor: pointer;
 }
 </style>
 </head>
@@ -163,7 +161,7 @@ let current = 1;
 let startTime;
 let circleSize = 30;
 
-/* 最大数に応じて円サイズ調整 */
+/* 数字サイズを最大数で調整 */
 function calcCircleSize(max) {
     if (max <= 30) return 40;
     if (max <= 50) return 34;
@@ -192,7 +190,7 @@ function start() {
         });
     }
 
-    numbers.forEach(n => placeNumber(n));
+    numbers.forEach(placeNumber);
 }
 
 function placeNumber(n) {
@@ -212,9 +210,9 @@ function placeNumber(n) {
         y = Math.random() * (area.clientHeight - circleSize);
 
         area.querySelectorAll(".number").forEach(el => {
-            const dx = el.offsetLeft - x;
-            const dy = el.offsetTop - y;
-            if (Math.hypot(dx, dy) < circleSize) ok = false;
+            if (Math.hypot(el.offsetLeft - x, el.offsetTop - y) < circleSize) {
+                ok = false;
+            }
         });
 
         tries++;
@@ -252,11 +250,11 @@ function end(text) {
     msg.style.display = "flex";
 }
 
-/* ボタンイベント */
-document.getElementById("leftBtn").onclick = () => press("leftArea");
-document.getElementById("rightBtn").onclick = () => press("rightArea");
-document.getElementById("restartBtn").onclick = start;
-document.getElementById("maxSelect").onchange = start;
+/* イベント */
+leftBtn.onclick = () => press("leftArea");
+rightBtn.onclick = () => press("rightArea");
+restartBtn.onclick = start;
+maxSelect.onchange = start;
 
 start();
 </script>
