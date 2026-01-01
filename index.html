@@ -1,254 +1,64 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<link rel="icon" href="https://raw.githubusercontent.com/cocomeda/game/main/favicon.jpg" type="image/x-icon">
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>左右判断ゲーム</title>
+<title>ゲームリスト</title>
 
 <style>
-* {
-    box-sizing: border-box;
-}
-
 body {
     margin: 0;
     font-family: sans-serif;
-    background: #f5f5f5;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     height: 100vh;
-    overflow: hidden; /* ← スクロール禁止 */
-    display: flex;
-    flex-direction: column;
+    background-color: #f5f5f5;
 }
 
-/* 超控えめ設定 */
-#setting {
-    height: 24px;
-    padding: 2px 6px;
-    background: #eee;
-    font-size: 11px;
-    text-align: right;
+/* ボタン全体（グリッド配置） */
+.button-container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
 }
 
-#setting select {
-    font-size: 11px;
-    padding: 0 2px;
-}
-
-#info {
-    height: 32px;
-    line-height: 32px;
-    text-align: center;
-    font-size: 16px;
-    background: #ddd;
-}
-
-#game {
-    flex: 1;
-    display: flex;
-    position: relative;
-}
-
-.area {
-    flex: 1;
-    position: relative;
-    border: 1px solid #ccc;
-    background: white;
-}
-
-.number {
-    position: absolute;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: #fff;
-    border: 2px solid #333;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    font-weight: bold;
-    user-select: none;
-}
-
-#message {
-    position: absolute;
-    inset: 0;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    font-size: 44px;
-    font-weight: bold;
-    background: rgba(255,255,255,0.85);
-    z-index: 10;
-    text-align: center;
-}
-
-/* ボタン固定 */
-#controls {
-    height: 60px;
-    display: flex;
-    gap: 10px;
-    padding: 8px;
-}
-
-#controls button {
-    flex: 1;
-    font-size: 16px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-}
-
-#leftBtn { background: #4CAF50; color: white; }
-#rightBtn { background: #2196F3; color: white; }
-
-#restartWrap {
-    height: 46px;
-    padding: 6px;
-}
-
-#restartBtn {
-    width: 100%;
-    height: 100%;
-    font-size: 14px;
-    border: none;
-    border-radius: 8px;
-    background: #777;
+/* 正方形ボタン */
+.game-button {
+    width: 120px;
+    height: 120px;
+    background-color: #4CAF50;
     color: white;
-    cursor: pointer;
+    text-decoration: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 12px;
+    transition: transform 0.2s, background-color 0.2s;
+}
+
+/* ホバー時 */
+.game-button:hover {
+    background-color: #43a047;
+    transform: scale(1.05);
 }
 </style>
 </head>
 
 <body>
 
-<div id="setting">
-    最大数：
-    <select id="maxSelect">
-        <option>10</option><option>20</option><option>30</option>
-        <option>40</option><option>50</option><option>60</option>
-        <option>70</option><option>80</option><option>90</option>
-        <option selected>100</option>
-        <option>120</option><option>150</option><option>200</option>
-    </select>
+<div class="button-container">
+    <a href="number.html" class="game-button">1toN</a>
+    <a href="sp_diff.html" class="game-button">左右比較</a>
+    <a href="seek.html" class="game-button">チェイス</a>
+    <a href="maz.html" class="game-button">イライラ</a>
+    <a href="max_number.html" class="game-button">マックス>まっく
+    <a href="RL_number.html" class="game-button">1toN-左右>さゆ>
 </div>
-
-<div id="info">次は：1</div>
-
-<div id="game">
-    <div class="area" id="leftArea"></div>
-    <div class="area" id="rightArea"></div>
-    <div id="message"></div>
-</div>
-
-<div id="controls">
-    <button id="leftBtn">LEFT</button>
-    <button id="rightBtn">RIGHT</button>
-</div>
-
-<div id="restartWrap">
-    <button id="restartBtn">RESTART</button>
-</div>
-
-<script>
-const leftArea = document.getElementById("leftArea");
-const rightArea = document.getElementById("rightArea");
-const info = document.getElementById("info");
-const message = document.getElementById("message");
-const maxSelect = document.getElementById("maxSelect");
-
-let current, maxNumber, startTime, gameEnd;
-
-const SIZE = 32;
-const GAP = 6;
-
-function shuffle(a) {
-    for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-    }
-}
-
-function place(area, num, placed) {
-    for (let i = 0; i < 120; i++) {
-        const x = Math.random() * (area.clientWidth - SIZE);
-        const y = Math.random() * (area.clientHeight - SIZE);
-        if (placed.every(p => Math.hypot(p.x - x, p.y - y) > SIZE + GAP)) {
-            const d = document.createElement("div");
-            d.className = "number";
-            d.textContent = num;
-            d.style.left = x + "px";
-            d.style.top = y + "px";
-            area.appendChild(d);
-            placed.push({ x, y });
-            return;
-        }
-    }
-}
-
-function startGame() {
-    leftArea.innerHTML = "";
-    rightArea.innerHTML = "";
-    message.style.display = "none";
-
-    current = 1;
-    gameEnd = false;
-    startTime = Date.now();
-    maxNumber = Number(maxSelect.value);
-
-    info.textContent = `次は：1 / ${maxNumber}`;
-
-    const nums = Array.from({ length: maxNumber }, (_, i) => i + 1);
-    shuffle(nums);
-
-    const half = Math.ceil(nums.length / 2);
-    const left = nums.slice(0, half);
-    const right = nums.slice(half);
-
-    let pl = [], pr = [];
-    left.forEach(n => place(leftArea, n, pl));
-    right.forEach(n => place(rightArea, n, pr));
-}
-
-function check(side) {
-    if (gameEnd) return;
-
-    const l = [...leftArea.children].find(e => +e.textContent === current);
-    const r = [...rightArea.children].find(e => +e.textContent === current);
-    const correct = l ? "left" : "right";
-
-    if (side !== correct) {
-        message.textContent = "GAME OVER";
-        message.style.display = "flex";
-        gameEnd = true;
-        return;
-    }
-
-    (l || r).remove();
-    current++;
-
-    if (current > maxNumber) {
-        const t = ((Date.now() - startTime) / 1000).toFixed(2);
-        message.textContent = `CLEAR\n${t}s`;
-        message.style.whiteSpace = "pre-line";
-        message.style.display = "flex";
-        gameEnd = true;
-    } else {
-        info.textContent = `次は：${current} / ${maxNumber}`;
-    }
-}
-
-leftBtn.onclick = () => check("left");
-rightBtn.onclick = () => check("right");
-restartBtn.onclick = startGame;
-maxSelect.onchange = startGame;
-
-startGame();
-</script>
 
 </body>
 </html>
-
-
-
-
