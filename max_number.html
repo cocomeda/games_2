@@ -3,140 +3,282 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>最大数タップゲーム</title>
+<title>Reaction Max</title>
 
 <style>
+:root {
+    --bg: #0f1115;
+    --panel: #181b22;
+    --cell: #222633;
+    --accent: #4fd1c5;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+}
+
+* {
+    box-sizing: border-box;
+}
+
 body {
-    font-family: sans-serif;
-    text-align: center;
-    background: #f5f5f5;
     margin: 0;
-    padding: 20px;
+    min-height: 100vh;
+    background: linear-gradient(160deg, #0f1115, #121826);
+    font-family: "Inter", system-ui, sans-serif;
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.app {
+    width: 100%;
+    max-width: 420px;
+    padding: 24px;
+}
+
+h1 {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    letter-spacing: 0.05em;
+}
+
+.control {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--panel);
+    padding: 12px 14px;
+    border-radius: 14px;
+    margin-bottom: 14px;
+}
+
+select, button {
+    background: var(--cell);
+    color: var(--text);
+    border: none;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 14px;
+}
+
+button {
+    cursor: pointer;
+    background: var(--accent);
+    color: #0f1115;
+    font-weight: 600;
 }
 
 #info {
-    font-size: 18px;
-    margin-bottom: 10px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+    margin: 10px 0;
 }
 
 .grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    max-width: 300px;
-    margin: 20px auto;
+    gap: 14px;
+    margin-top: 14px;
 }
 
 .cell {
-    background: white;
-    border-radius: 12px;
+    background: var(--cell);
+    border-radius: 16px;
+    text-align: center;
     font-size: 28px;
-    font-weight: bold;
-    padding: 25px 0;
+    font-weight: 600;
+    padding: 26px 0;
     cursor: pointer;
-    user-select: none;
-    transition: transform 0.1s;
+    transition: transform 0.08s ease, background 0.08s ease;
 }
 
 .cell:hover {
-    transform: scale(1.05);
+    transform: translateY(-2px);
 }
 
-/* 正解を赤丸で囲む */
-.correct {
-    border: 4px solid red;
-    border-radius: 50%;
-}
-
-/* 押せなくする */
 .disabled {
     pointer-events: none;
-    opacity: 0.6;
+    opacity: 0.4;
 }
 
-#result {
-    font-size: 20px;
-    margin-top: 20px;
-    font-weight: bold;
+.correct {
+    outline: 3px solid var(--accent);
+}
+
+/* overlay */
+#overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15,17,21,0.85);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+#overlayContent {
+    background: var(--panel);
+    padding: 28px 32px;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 360px;
+    text-align: center;
+}
+
+#overlayContent h2 {
+    margin: 0 0 10px;
+    font-size: 28px;
+}
+
+#stats {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 16px;
+}
+
+#overlayContent button {
+    width: 100%;
 }
 </style>
 </head>
 
 <body>
 
-<h2>一番大きい数字をタップ！</h2>
-<div id="info">トライアル 1 / 10</div>
+<div class="app">
+    <h1>REACTION MAX</h1>
 
-<div class="grid" id="grid"></div>
+    <div class="control">
+        <div>
+            Grid
+            <select id="gridSizeSelect">
+                <option value="9">3×3</option>
+                <option value="4">2×2</option>
+            </select>
+        </div>
+        <button onclick="startGame()">START</button>
+    </div>
 
-<div id="result"></div>
+    <div id="info"></div>
+    <div class="grid" id="grid"></div>
+</div>
+
+<div id="overlay">
+    <div id="overlayContent">
+        <h2 id="overlayText"></h2>
+        <div id="stats"></div>
+        <button onclick="retry()">RETRY</button>
+    </div>
+</div>
 
 <script>
-const TOTAL_TRIALS = 10;
-let currentTrial = 1;
+const TOTAL_TRIALS = 100;
+const MAX_MISSES = 10;
+
+let currentTrial = 0;
+let missCount = 0;
 let numbers = [];
 let maxNumber = 0;
-let startTime;
-let gameStarted = false;
+let trialStart = 0;
+let reactions = [];
+let gameActive = false;
 
 const grid = document.getElementById("grid");
 const info = document.getElementById("info");
-const result = document.getElementById("result");
+const overlay = document.getElementById("overlay");
+const overlayText = document.getElementById("overlayText");
+const stats = document.getElementById("stats");
+const gridSizeSelect = document.getElementById("gridSizeSelect");
 
-function randomNumber() {
-    return Math.floor(Math.random() * 90) + 10; // 10〜99
+const rand = () => Math.floor(Math.random() * 90) + 10;
+
+function startGame() {
+    currentTrial = 1;
+    missCount = 0;
+    reactions = [];
+    gameActive = true;
+    overlay.style.display = "none";
+    startTrial();
 }
 
 function startTrial() {
-    if (!gameStarted) {
-        startTime = Date.now();
-        gameStarted = true;
-    }
+    if (!gameActive) return;
 
     grid.innerHTML = "";
     numbers = [];
 
-    for (let i = 0; i < 9; i++) {
-        numbers.push(randomNumber());
+    const size = Number(gridSizeSelect.value);
+    grid.style.gridTemplateColumns = `repeat(${size === 9 ? 3 : 2}, 1fr)`;
+
+    while (numbers.length < size) {
+        const n = rand();
+        if (!numbers.includes(n)) numbers.push(n);
     }
 
     maxNumber = Math.max(...numbers);
 
-    numbers.forEach(num => {
-        const cell = document.createElement("div");
-        cell.className = "cell";
-        cell.textContent = num;
-        cell.onclick = () => handleClick(cell, num);
-        grid.appendChild(cell);
+    numbers.forEach(n => {
+        const c = document.createElement("div");
+        c.className = "cell";
+        c.textContent = n;
+        c.onclick = () => tap(n);
+        grid.appendChild(c);
     });
 
-    info.textContent = `トライアル ${currentTrial} / ${TOTAL_TRIALS}`;
+    trialStart = performance.now();
+    info.textContent = `Trial ${currentTrial} / ${TOTAL_TRIALS}  ·  Miss ${missCount}/${MAX_MISSES}`;
 }
 
-function handleClick(cell, num) {
-    const cells = document.querySelectorAll(".cell");
-    cells.forEach(c => c.classList.add("disabled"));
+function tap(n) {
+    document.querySelectorAll(".cell").forEach(c => c.classList.add("disabled"));
 
-    if (num === maxNumber) {
+    const rt = (performance.now() - trialStart) / 1000;
+
+    if (n === maxNumber) {
+        reactions.push(rt);
         currentTrial++;
-        if (currentTrial > TOTAL_TRIALS) {
-            const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
-            result.textContent = `🎉 クリア！ 合計タイム：${totalTime} 秒`;
-        } else {
-            setTimeout(startTrial, 500);
-        }
+
+        if (currentTrial > TOTAL_TRIALS) finish();
+        else setTimeout(startTrial, 120);
     } else {
-        // 正解を赤丸で囲む
-        cells.forEach(c => {
-            if (Number(c.textContent) === maxNumber) {
-                c.classList.add("correct");
-            }
+        missCount++;
+        document.querySelectorAll(".cell").forEach(c => {
+            if (+c.textContent === maxNumber) c.classList.add("correct");
         });
+
+        if (missCount >= MAX_MISSES) gameOver();
+        else setTimeout(startTrial, 400);
     }
 }
 
-// 初回開始
-startTrial();
+function finish() {
+    const avg = calcAverage(reactions);
+    overlayText.textContent = "CLEAR";
+    stats.innerHTML = `Average Reaction<br><b>${avg.toFixed(3)} s</b>`;
+    overlay.style.display = "flex";
+}
+
+function gameOver() {
+    overlayText.textContent = "GAME OVER";
+    stats.innerHTML = `Trial ${currentTrial}<br>Miss ${missCount}`;
+    overlay.style.display = "flex";
+}
+
+function retry() {
+    gameActive = false;
+    grid.innerHTML = "";
+    info.textContent = "";
+    overlay.style.display = "none";
+}
+
+function calcAverage(arr) {
+    const m = arr.reduce((a,b)=>a+b,0)/arr.length;
+    const v = arr.reduce((s,x)=>s+(x-m)**2,0)/arr.length;
+    const sd = Math.sqrt(v);
+    const filtered = arr.filter(x => x >= m-2*sd && x <= m+2*sd);
+    return filtered.reduce((a,b)=>a+b,0)/filtered.length;
+}
 </script>
 
 </body>
