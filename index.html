@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<link rel="icon" href="https://raw.githubusercontent.com/cocomeda/games_2/main/favicon.jpg" type="image/x-icon">
+<link rel="icon" href="https://raw.githubusercontent.com/cocomeda/game/main/favicon.jpg" type="image/x-icon">
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,59 +11,40 @@
 body {
     margin: 0;
     font-family: sans-serif;
-    min-height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
+    height: 100vh;
     background-color: #f5f5f5;
 }
 
-/* 全体ラッパー */
+/* ボタン全体（グリッド配置） */
 .button-container {
-    display: flex;
-    flex-wrap: wrap;              /* ★ 画面が狭いと折り返す */
-    justify-content: center;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
     gap: 20px;
-    padding: 20px;
-    max-width: 500px;
 }
 
-/* ゲームボタン */
+/* 正方形ボタン */
 .game-button {
-    width: 130px;
-    height: 130px;
-    background-color: #000;
-    color: #ccc;
+    width: 120px;
+    height: 120px;
+    background-color: #4CAF50;
+    color: white;
     text-decoration: none;
     display: flex;
     justify-content: center;
     align-items: center;
     font-size: 18px;
     font-weight: bold;
-    border-radius: 16px;
-    transition: transform 0.15s, background-color 0.15s;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
+    border-radius: 12px;
+    transition: transform 0.2s, background-color 0.2s;
 }
 
-/* ホバー（PC） */
+/* ホバー時 */
 .game-button:hover {
-    background-color: #555;
+    background-color: #43a047;
     transform: scale(1.05);
-}
-
-/* タップ時（スマホ） */
-.game-button:active {
-    transform: scale(0.95);
-}
-
-/* 小さい画面用 */
-@media (max-width: 360px) {
-    .game-button {
-        width: 110px;
-        height: 110px;
-        font-size: 16px;
-    }
 }
 </style>
 </head>
@@ -75,7 +56,12 @@ body {
     <a href="sp_diff.html" class="game-button">左右比較</a>
     <a href="seek.html" class="game-button">チェイス</a>
     <a href="maz.html" class="game-button">イライラ</a>
+    <a href="gameE.html" class="game-button">ゲームE</a>
+    <a href="gameF.html" class="game-button">ゲームF</a>
 </div>
 
 </body>
 </html>
+
+
+
