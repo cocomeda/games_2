@@ -2,284 +2,234 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Reaction Max</title>
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>最大数タップゲーム</title>
 
 <style>
 :root {
-    --bg: #0f1115;
-    --panel: #181b22;
-    --cell: #222633;
-    --accent: #4fd1c5;
-    --text: #e5e7eb;
-    --muted: #9ca3af;
+    --bg:#0f1220;
+    --panel:#1a1e35;
+    --cell:#242862;
+    --accent:#4cc9f0;
+    --danger:#ff4d6d;
+    --text:#fff;
+    --muted:#9aa0c4;
 }
 
-* {
-    box-sizing: border-box;
-}
+* { box-sizing:border-box; }
 
 body {
-    margin: 0;
-    min-height: 100vh;
-    background: linear-gradient(160deg, #0f1115, #121826);
-    font-family: "Inter", system-ui, sans-serif;
-    color: var(--text);
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:system-ui, sans-serif;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    min-height:100vh;
 }
 
-.app {
-    width: 100%;
-    max-width: 420px;
-    padding: 24px;
+.container {
+    width:100%;
+    max-width:520px;
+    padding:24px;
+    text-align:center;
 }
 
-h1 {
-    text-align: center;
-    font-size: 22px;
-    font-weight: 600;
-    margin-bottom: 16px;
-    letter-spacing: 0.05em;
+h1 { font-size:26px; margin-bottom:10px; }
+#info { font-size:18px; color:var(--muted); margin-bottom:18px; }
+
+.controls {
+    display:flex;
+    justify-content:center;
+    gap:12px;
+    margin-bottom:20px;
+}
+.controls button {
+    background:var(--panel);
+    color:var(--text);
+    border:none;
+    padding:12px 20px;
+    border-radius:14px;
+    font-size:18px;
+    cursor:pointer;
+}
+.controls button.active {
+    background:var(--accent);
+    color:#000;
+    font-weight:700;
 }
 
-.control {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: var(--panel);
-    padding: 12px 14px;
-    border-radius: 14px;
-    margin-bottom: 14px;
+.start-btn {
+    margin:24px auto;
+    padding:18px;
+    width:80%;
+    max-width:260px;
+    font-size:22px;
+    font-weight:800;
+    border-radius:18px;
+    border:none;
+    background:var(--accent);
+    color:#000;
+    cursor:pointer;
 }
 
-select, button {
-    background: var(--cell);
-    color: var(--text);
-    border: none;
-    border-radius: 10px;
-    padding: 8px 14px;
-    font-size: 14px;
-}
-
-button {
-    cursor: pointer;
-    background: var(--accent);
-    color: #0f1115;
-    font-weight: 600;
-}
-
-#info {
-    text-align: center;
-    font-size: 13px;
-    color: var(--muted);
-    margin: 10px 0;
-}
-
-.grid {
-    display: grid;
-    gap: 14px;
-    margin-top: 14px;
-}
+.grid { display:grid; gap:18px; margin-top:20px; }
+.grid.four { grid-template-columns:repeat(2,1fr); }
+.grid.nine { grid-template-columns:repeat(3,1fr); }
 
 .cell {
-    background: var(--cell);
-    border-radius: 16px;
-    text-align: center;
-    font-size: 28px;
-    font-weight: 600;
-    padding: 26px 0;
-    cursor: pointer;
-    transition: transform 0.08s ease, background 0.08s ease;
+    background:var(--cell);
+    border-radius:18px;
+    font-size:42px;
+    font-weight:800;
+    padding:38px 0;
+    cursor:pointer;
+    transition:transform .05s;
 }
+.cell:active { transform:scale(.96); }
+.cell.disabled { pointer-events:none; opacity:.5; }
+.cell.correct { outline:5px solid var(--accent); }
 
-.cell:hover {
-    transform: translateY(-2px);
+.overlay {
+    position:fixed; inset:0;
+    background:rgba(0,0,0,.85);
+    display:none; justify-content:center; align-items:center;
+    z-index:10;
 }
-
-.disabled {
-    pointer-events: none;
-    opacity: 0.4;
+.overlay.show { display:flex; }
+.overlay-box {
+    background:var(--panel);
+    padding:40px 28px;
+    border-radius:22px;
+    width:90%; max-width:420px;
 }
-
-.correct {
-    outline: 3px solid var(--accent);
-}
-
-/* overlay */
-#overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(15,17,21,0.85);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 10;
-}
-
-#overlayContent {
-    background: var(--panel);
-    padding: 28px 32px;
-    border-radius: 20px;
-    width: 90%;
-    max-width: 360px;
-    text-align: center;
-}
-
-#overlayContent h2 {
-    margin: 0 0 10px;
-    font-size: 28px;
-}
-
-#stats {
-    font-size: 14px;
-    color: var(--muted);
-    margin-bottom: 16px;
-}
-
-#overlayContent button {
-    width: 100%;
-}
+.overlay h2 { font-size:36px; margin-bottom:12px; }
+.overlay h2.gameover { color:var(--danger); }
+.result-label { font-size:14px; color:var(--muted); letter-spacing:.08em; margin-top:14px; }
+.result-value { font-size:44px; font-weight:800; margin-top:6px; color:var(--accent); }
+.retry { margin-top:26px; width:100%; padding:16px; font-size:18px; font-weight:700; border:none; border-radius:16px; background:var(--accent); cursor:pointer; }
 </style>
 </head>
-
 <body>
+<div class="container">
 
-<div class="app">
-    <h1>REACTION MAX</h1>
+<h1>一番大きい数字をタップ</h1>
+<div id="info">マス数を選んで START</div>
 
-    <div class="control">
-        <div>
-            Grid
-            <select id="gridSizeSelect">
-                <option value="9">3×3</option>
-                <option value="4">2×2</option>
-            </select>
-        </div>
-        <button onclick="startGame()">START</button>
-    </div>
-
-    <div id="info"></div>
-    <div class="grid" id="grid"></div>
+<div class="controls">
+    <button id="btn4">4</button>
+    <button id="btn9" class="active">9</button>
 </div>
 
-<div id="overlay">
-    <div id="overlayContent">
-        <h2 id="overlayText"></h2>
+<button class="start-btn" id="startBtn">START</button>
+<div class="grid nine" id="grid"></div>
+</div>
+
+<div class="overlay" id="overlay">
+    <div class="overlay-box">
+        <h2 id="overlayTitle"></h2>
         <div id="stats"></div>
-        <button onclick="retry()">RETRY</button>
+        <button class="retry" onclick="location.reload()">RETRY</button>
     </div>
 </div>
 
 <script>
-const TOTAL_TRIALS = 100;
-const MAX_MISSES = 10;
+const TOTAL_TRIALS=100;
+const MAX_MISS=10;
 
-let currentTrial = 0;
-let missCount = 0;
-let numbers = [];
-let maxNumber = 0;
-let trialStart = 0;
-let reactions = [];
-let gameActive = false;
+let gridSize=9, currentTrial=1, missCount=0, reactionTimes=[], startTime=0, started=false;
+const grid=document.getElementById("grid");
+const info=document.getElementById("info");
+const overlay=document.getElementById("overlay");
+const overlayTitle=document.getElementById("overlayTitle");
+const stats=document.getElementById("stats");
+const startBtn=document.getElementById("startBtn");
 
-const grid = document.getElementById("grid");
-const info = document.getElementById("info");
-const overlay = document.getElementById("overlay");
-const overlayText = document.getElementById("overlayText");
-const stats = document.getElementById("stats");
-const gridSizeSelect = document.getElementById("gridSizeSelect");
+document.getElementById("btn4").onclick=()=>setGrid(4);
+document.getElementById("btn9").onclick=()=>setGrid(9);
+startBtn.onclick=startGame;
 
-const rand = () => Math.floor(Math.random() * 90) + 10;
+function setGrid(size){
+    if(started) return;
+    gridSize=size;
+    document.getElementById("btn4").classList.toggle("active",size===4);
+    document.getElementById("btn9").classList.toggle("active",size===9);
+    grid.className="grid "+(size===4?"four":"nine");
+}
 
-function startGame() {
-    currentTrial = 1;
-    missCount = 0;
-    reactions = [];
-    gameActive = true;
-    overlay.style.display = "none";
+function startGame(){
+    if(started) return;
+    started=true;
+    startBtn.style.display="none";
+    document.querySelector(".controls").style.display="none";
     startTrial();
 }
 
-function startTrial() {
-    if (!gameActive) return;
+function uniqueNumbers(count){
+    const set=new Set();
+    while(set.size<count){ set.add(Math.floor(Math.random()*90)+10); }
+    return [...set];
+}
 
-    grid.innerHTML = "";
-    numbers = [];
+function startTrial(){
+    grid.replaceChildren();
+    const nums=uniqueNumbers(gridSize);
+    const max=Math.max(...nums);
 
-    const size = Number(gridSizeSelect.value);
-    grid.style.gridTemplateColumns = `repeat(${size === 9 ? 3 : 2}, 1fr)`;
+    // 描画後にタイマー開始
+    requestAnimationFrame(()=>{ startTime=performance.now(); });
 
-    while (numbers.length < size) {
-        const n = rand();
-        if (!numbers.includes(n)) numbers.push(n);
-    }
-
-    maxNumber = Math.max(...numbers);
-
-    numbers.forEach(n => {
-        const c = document.createElement("div");
-        c.className = "cell";
-        c.textContent = n;
-        c.onclick = () => tap(n);
-        grid.appendChild(c);
+    nums.forEach(n=>{
+        const d=document.createElement("div");
+        d.className="cell";
+        d.textContent=n;
+        d.onclick=()=>handleClick(d,n,max);
+        grid.appendChild(d);
     });
 
-    trialStart = performance.now();
-    info.textContent = `Trial ${currentTrial} / ${TOTAL_TRIALS}  ·  Miss ${missCount}/${MAX_MISSES}`;
+    info.textContent=`Trial ${currentTrial} / ${TOTAL_TRIALS}`;
 }
 
-function tap(n) {
-    document.querySelectorAll(".cell").forEach(c => c.classList.add("disabled"));
+function handleClick(cell,num,max){
+    document.querySelectorAll(".cell").forEach(c=>c.classList.add("disabled"));
 
-    const rt = (performance.now() - trialStart) / 1000;
-
-    if (n === maxNumber) {
-        reactions.push(rt);
+    if(num===max){
+        reactionTimes.push((performance.now()-startTime)/1000);
         currentTrial++;
-
-        if (currentTrial > TOTAL_TRIALS) finish();
-        else setTimeout(startTrial, 120);
+        if(currentTrial>TOTAL_TRIALS){ finishGame(); }
+        else requestAnimationFrame(startTrial);
     } else {
         missCount++;
-        document.querySelectorAll(".cell").forEach(c => {
-            if (+c.textContent === maxNumber) c.classList.add("correct");
-        });
-
-        if (missCount >= MAX_MISSES) gameOver();
-        else setTimeout(startTrial, 400);
+        document.querySelectorAll(".cell").forEach(c=>{ if(+c.textContent===max)c.classList.add("correct"); });
+        if(missCount>=MAX_MISS) gameOver();
+        else requestAnimationFrame(startTrial);
     }
 }
 
-function finish() {
-    const avg = calcAverage(reactions);
-    overlayText.textContent = "CLEAR";
-    stats.innerHTML = `Average Reaction<br><b>${avg.toFixed(3)} s</b>`;
-    overlay.style.display = "flex";
+function finishGame(){
+    const mean=reactionTimes.reduce((a,b)=>a+b)/reactionTimes.length;
+    const variance=reactionTimes.reduce((a,b)=>a+(b-mean)**2,0)/reactionTimes.length;
+    const sd=Math.sqrt(variance);
+    const filtered=reactionTimes.filter(t=>Math.abs(t-mean)<=2*sd);
+    const avg=filtered.reduce((a,b)=>a+b)/filtered.length;
+
+    overlay.classList.add("show");
+    overlayTitle.textContent="CLEAR";
+    stats.innerHTML=`
+        <div class="result-label">AVERAGE REACTION</div>
+        <div class="result-value">${avg.toFixed(3)} s</div>`;
 }
 
-function gameOver() {
-    overlayText.textContent = "GAME OVER";
-    stats.innerHTML = `Trial ${currentTrial}<br>Miss ${missCount}`;
-    overlay.style.display = "flex";
-}
-
-function retry() {
-    gameActive = false;
-    grid.innerHTML = "";
-    info.textContent = "";
-    overlay.style.display = "none";
-}
-
-function calcAverage(arr) {
-    const m = arr.reduce((a,b)=>a+b,0)/arr.length;
-    const v = arr.reduce((s,x)=>s+(x-m)**2,0)/arr.length;
-    const sd = Math.sqrt(v);
-    const filtered = arr.filter(x => x >= m-2*sd && x <= m+2*sd);
-    return filtered.reduce((a,b)=>a+b,0)/filtered.length;
+function gameOver(){
+    overlay.classList.add("show");
+    overlayTitle.textContent="GAME OVER";
+    overlayTitle.classList.add("gameover");
+    stats.innerHTML=`
+        <div class="result-label">MISSES</div>
+        <div class="result-value">${missCount}</div>`;
 }
 </script>
-
 </body>
 </html>
