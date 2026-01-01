@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>最大数タップゲーム</title>
+
+<style>
+body {
+    font-family: sans-serif;
+    text-align: center;
+    background: #f5f5f5;
+    margin: 0;
+    padding: 20px;
+}
+
+#info {
+    font-size: 18px;
+    margin-bottom: 10px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    max-width: 300px;
+    margin: 20px auto;
+}
+
+.cell {
+    background: white;
+    border-radius: 12px;
+    font-size: 28px;
+    font-weight: bold;
+    padding: 25px 0;
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.1s;
+}
+
+.cell:hover {
+    transform: scale(1.05);
+}
+
+/* 正解を赤丸で囲む */
+.correct {
+    border: 4px solid red;
+    border-radius: 50%;
+}
+
+/* 押せなくする */
+.disabled {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+#result {
+    font-size: 20px;
+    margin-top: 20px;
+    font-weight: bold;
+}
+</style>
+</head>
+
+<body>
+
+<h2>一番大きい数字をタップ！</h2>
+<div id="info">トライアル 1 / 10</div>
+
+<div class="grid" id="grid"></div>
+
+<div id="result"></div>
+
+<script>
+const TOTAL_TRIALS = 10;
+let currentTrial = 1;
+let numbers = [];
+let maxNumber = 0;
+let startTime;
+let gameStarted = false;
+
+const grid = document.getElementById("grid");
+const info = document.getElementById("info");
+const result = document.getElementById("result");
+
+function randomNumber() {
+    return Math.floor(Math.random() * 90) + 10; // 10〜99
+}
+
+function startTrial() {
+    if (!gameStarted) {
+        startTime = Date.now();
+        gameStarted = true;
+    }
+
+    grid.innerHTML = "";
+    numbers = [];
+
+    for (let i = 0; i < 9; i++) {
+        numbers.push(randomNumber());
+    }
+
+    maxNumber = Math.max(...numbers);
+
+    numbers.forEach(num => {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.textContent = num;
+        cell.onclick = () => handleClick(cell, num);
+        grid.appendChild(cell);
+    });
+
+    info.textContent = `トライアル ${currentTrial} / ${TOTAL_TRIALS}`;
+}
+
+function handleClick(cell, num) {
+    const cells = document.querySelectorAll(".cell");
+    cells.forEach(c => c.classList.add("disabled"));
+
+    if (num === maxNumber) {
+        currentTrial++;
+        if (currentTrial > TOTAL_TRIALS) {
+            const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+            result.textContent = `🎉 クリア！ 合計タイム：${totalTime} 秒`;
+        } else {
+            setTimeout(startTrial, 500);
+        }
+    } else {
+        // 正解を赤丸で囲む
+        cells.forEach(c => {
+            if (Number(c.textContent) === maxNumber) {
+                c.classList.add("correct");
+            }
+        });
+    }
+}
+
+// 初回開始
+startTrial();
+</script>
+
+</body>
+</html>
