@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>重力迷路 - 走行効率解析版</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root {
+    --bg:#0f1220; --panel:#1a1e35; --accent:#4cc9f0; --danger:#ff4d6d; --text:#fff; --muted:#9aa0c4; --sig:#ffde03;
+}
+body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui, sans-serif; overflow:hidden; touch-action:none; }
+.ui-layer { position:fixed; top:0; width:100%; padding:20px; box-sizing:border-box; text-align:center; z-index:5; pointer-events:none; display:flex; justify-content: space-between; }
+.stats-badge { background:rgba(26,30,53,0.8); padding:8px 14px; border-radius:15px; font-weight:bold; pointer-events:auto; color: var(--accent); font-size: 14px; border: 1px solid rgba(76,201,240,0.2); }
+
+#game-canvas { display:block; background: radial-gradient(circle, #242862 0%, #0f1220 100%); }
+
+.setup-screen { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:10; padding:20px; text-align: center; }
+.btn { background:var(--accent); color:#000; border:none; padding:15px 30px; border-radius:12px; font-size:18px; font-weight:bold; cursor:pointer; margin:10px; }
+
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); display:none; flex-direction:column; align-items:center; justify-content:center; z-index:20; overflow-y: auto; padding: 20px 0; }
+.overlay-box { width: 95%; max-width: 500px; text-align: center; }
+.chart-container { width:100%; height:280px; margin:15px 0; background: rgba(255,255,255,0.03); border-radius: 16px; padding: 10px; box-sizing: border-box; }
+.result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.res-card { background: var(--panel); padding: 10px; border-radius: 12px; }
+.res-card label { font-size: 11px; color: var(--muted); display: block; }
+.res-card span { font-size: 20px; font-weight: 800; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="ui-layer">
+    <span class="stats-badge" id="info">Trial: 0/100</span>
+    <span class="stats-badge" id="live-eff">Efficiency: --%</span>
+</div>
+
+<div id="setup" class="setup-screen">
+    <h1 style="font-size: 28px;">重力迷路 解析Ver.</h1>
+    <p style="color: var(--muted); margin-bottom: 25px;">「最短距離」と「実際の移動距離」の比から<br>あなたの操作の正確度を測定します</p>
+    <select id="trial-select" style="background: var(--panel); color: white; border: 2px solid var(--accent); padding: 10px; border-radius: 10px; font-size: 16px; margin-bottom: 20px;">
+        <option value="40">40 試行</option>
+        <option value="60">60 試行</option>
+        <option value="100" selected>100 試行</option>
+    </select>
+    <button class="btn" id="start-btn">開始</button>
+</div>
+
+<canvas id="game-canvas"></canvas>
+
+<div id="overlay" class="overlay">
+    <div class="overlay-box">
+        <h2 style="color: var(--accent);">RESULT</h2>
+        <div class="result-grid">
+            <div class="res-card"><label>AVG TIME</label><span id="final-time">--</span></div>
+            <div class="res-card"><label>AVG EFFICIENCY</label><span id="final-eff">--</span></div>
+        </div>
+        <div class="chart-container"><canvas id="timeChart"></canvas></div>
+        <div class="chart-container"><canvas id="effChart"></canvas></div>
+        <button class="btn" onclick="location.reload()" style="width:100%">RETRY</button>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+let totalTrials = 100;
+let currentTrial = 0;
+let trialLogs = []; // {time, efficiency}
+let ball, target, running = false;
+let accel = { x: 0, y: 0 };
+const friction = 0.98;
+
+// 移動距離計測用
+let lastBallPos = { x: 0, y: 0 };
+let totalDistance = 0;
+let initialDistance = 0;
+let startTime = 0;
+
+function initCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+
+class Entity {
+    constructor(x, y, radius, color) {
+        this.x = x; this.y = y; this.radius = radius; this.color = color;
+        this.vx = 0; this.vy = 0;
+    }
+    draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        if(this.color === 'transparent') {
+            ctx.strokeStyle = '#4cc9f0'; ctx.lineWidth = 2; ctx.stroke();
+        }
+    }
+}
+
+function spawnTarget() {
+    const margin = 70;
+    target = new Entity(
+        margin + Math.random() * (canvas.width - margin*2),
+        margin + Math.random() * (canvas.height - margin*2),
+        35, 'transparent'
+    );
+    // 計測リセット
+    initialDistance = Math.hypot(ball.x - target.x, ball.y - target.y);
+    totalDistance = 0;
+    lastBallPos = { x: ball.x, y: ball.y };
+    startTime = performance.now();
+}
+
+function update() {
+    if(!running) return;
+
+    ball.vx += accel.x * 0.45;
+    ball.vy += accel.y * 0.45;
+    ball.vx *= friction; ball.vy *= friction;
+    ball.x += ball.vx; ball.y += ball.vy;
+
+    // 走行距離の加算
+    const moveDist = Math.hypot(ball.x - lastBallPos.x, ball.y - lastBallPos.y);
+    totalDistance += moveDist;
+    lastBallPos = { x: ball.x, y: ball.y };
+
+    // 壁判定
+    if(ball.x < ball.radius || ball.x > canvas.width - ball.radius) ball.vx *= -0.6;
+    if(ball.y < ball.radius || ball.y > canvas.height - ball.radius) ball.vy *= -0.6;
+    ball.x = Math.max(ball.radius, Math.min(canvas.width - ball.radius, ball.x));
+    ball.y = Math.max(ball.radius, Math.min(canvas.height - ball.radius, ball.y));
+
+    // リアルタイム効率表示
+    const currentEff = Math.min(100, (initialDistance / Math.max(initialDistance, totalDistance)) * 100);
+    document.getElementById('live-eff').textContent = `Eff: ${currentEff.toFixed(1)}%`;
+
+    const distToTarget = Math.hypot(ball.x - target.x, ball.y - target.y);
+    if(distToTarget < ball.radius + target.radius) {
+        const time = (performance.now() - startTime) / 1000;
+        trialLogs.push({ time, efficiency: currentEff });
+        currentTrial++;
+        document.getElementById('info').textContent = `Trial: ${currentTrial}/${totalTrials}`;
+        if(currentTrial >= totalTrials) finishGame();
+        else spawnTarget();
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    target.draw();
+    ball.draw();
+    requestAnimationFrame(update);
+}
+
+document.getElementById('start-btn').onclick = async () => {
+    totalTrials = parseInt(document.getElementById('trial-select').value);
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        await DeviceOrientationEvent.requestPermission();
+    }
+    window.addEventListener('deviceorientation', (e) => {
+        accel.x = e.gamma / 8; accel.y = e.beta / 8;
+    });
+    document.getElementById('setup').style.display = 'none';
+    initCanvas();
+    ball = new Entity(canvas.width/2, canvas.height/2, 15, '#4cc9f0');
+    spawnTarget();
+    running = true;
+    update();
+};
+
+function finishGame() {
+    running = false;
+    document.getElementById('overlay').style.display = 'flex';
+    
+    const avgTime = trialLogs.reduce((a,b)=>a+b.time, 0) / totalTrials;
+    const avgEff = trialLogs.reduce((a,b)=>a+b.efficiency, 0) / totalTrials;
+    document.getElementById('final-time').textContent = avgTime.toFixed(2) + "s";
+    document.getElementById('final-eff').textContent = avgEff.toFixed(1) + "%";
+
+    renderStatChart('timeChart', 'time', 'Time (s)', '#4cc9f0');
+    renderStatChart('effChart', 'efficiency', 'Efficiency (%)', '#ffde03');
+}
+
+function renderStatChart(canvasId, key, label, color) {
+    const chunks = [];
+    const labels = [];
+    const averages = [];
+    const errors = [];
+
+    for (let i = 0; i < trialLogs.length; i += 10) {
+        const chunk = trialLogs.slice(i, i + 10).map(d => d[key]);
+        const m = chunk.reduce((a,b)=>a+b)/chunk.length;
+        const sd = Math.sqrt(chunk.reduce((a,b)=>a+(b-m)**2,0)/chunk.length);
+        averages.push(m);
+        errors.push(chunk.length > 1 ? sd/Math.sqrt(chunk.length) : 0);
+        labels.push(`${i+1}-${i+10}`);
+    }
+
+    new Chart(document.getElementById(canvasId), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: averages,
+                borderColor: color,
+                backgroundColor: color + '22',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, title: { display: true, text: label, color: '#fff' } },
+            scales: { y: { ticks: { color: '#9aa0c4' }, grid: { color: '#ffffff11' } }, x: { ticks: { color: '#9aa0c4' } } }
+        },
+        plugins: [{
+            id: 'err',
+            afterDatasetsDraw: (chart) => {
+                const {ctx, scales:{y}} = chart;
+                ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+                chart.getDatasetMeta(0).data.forEach((p, i) => {
+                    const yt = y.getPixelForValue(averages[i] + errors[i]);
+                    const yb = y.getPixelForValue(averages[i] - errors[i]);
+                    ctx.beginPath(); ctx.moveTo(p.x, yt); ctx.lineTo(p.x, yb); ctx.stroke();
+                });
+            }
+        }]
+    });
+}
+</script>
+</body>
+</html>
