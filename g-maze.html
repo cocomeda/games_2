@@ -3,205 +3,281 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>重力迷路 - 精密解析Ver.</title>
+<title>重力迷路 - 実験プロトコル版</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-:root {
-    --bg:#0f1220; --panel:#1a1e35; --accent:#4cc9f0; --text:#fff; --muted:#9aa0c4;
-}
-body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui, sans-serif; overflow:hidden; touch-action:none; }
-.ui-layer { position:fixed; top:0; width:100%; padding:15px; box-sizing:border-box; display:flex; justify-content: space-between; pointer-events:none; z-index:5;}
-.stats-badge { background:rgba(26,30,53,0.8); padding:8px 12px; border-radius:10px; font-weight:bold; color: var(--accent); font-size: 13px; border: 1px solid rgba(76,201,240,0.3); pointer-events:auto; }
+:root { --bg:#0f1220; --accent:#4cc9f0; --danger:#ff4d6d; --success:#2ecc71; --text:#fff; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:sans-serif; overflow:hidden; touch-action:none; }
+.ui-layer { position:fixed; top:0; width:100%; padding:15px; box-sizing:border-box; display:flex; justify-content: space-between; pointer-events:none; z-index:10; }
+.stats-badge { background:rgba(26,30,53,0.8); padding:8px 14px; border-radius:15px; font-weight:bold; color:var(--accent); border:1px solid rgba(76,201,240,0.2); font-size: 14px; }
+.stats-badge.error { color: var(--danger); border-color: rgba(255,77,109,0.3); }
 
+.setup-screen { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:100; text-align:center; padding:20px; }
+.level-outer { width: 150px; height: 150px; border: 2px solid #333; border-radius: 50%; position: relative; margin-bottom: 20px; }
+.level-target { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; border: 2px solid var(--accent); border-radius: 50%; }
+.level-bubble { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 18px; height: 18px; background: var(--accent); border-radius: 50%; }
+
+select { background: #1a1e35; color: white; border: 1px solid var(--accent); padding: 10px; border-radius: 8px; font-size: 16px; margin-bottom: 20px; width: 200px; outline: none; }
+.btn { background:var(--accent); color:#000; border:none; padding:15px 50px; border-radius:12px; font-size:20px; font-weight:bold; cursor:pointer; }
 #game-canvas { display:block; }
+#miss-flash { position:fixed; inset:0; background:rgba(255,77,109,0.5); display:none; pointer-events:none; z-index:50; }
 
-.setup-screen { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:100; padding:20px; text-align: center; }
-.btn { background:var(--accent); color:#000; border:none; padding:20px 40px; border-radius:15px; font-size:20px; font-weight:bold; cursor:pointer; }
-
-.overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); display:none; flex-direction:column; align-items:center; z-index:200; overflow-y: auto; padding: 20px 0; }
-.overlay-box { width: 90%; max-width: 500px; text-align: center; }
-.chart-container { width:100%; height:250px; margin:15px 0; background: rgba(255,255,255,0.03); border-radius: 12px; padding: 10px; box-sizing: border-box; }
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); display:none; flex-direction:column; align-items:center; justify-content:center; z-index:200; overflow-y:auto; padding: 20px; }
+.summary-box { color: var(--accent); font-size: 18px; font-weight: bold; margin-bottom: 5px; }
+.chart-container { width:90%; max-width:500px; height:160px; margin-bottom: 15px; background:rgba(255,255,255,0.03); border-radius:12px; padding:10px; }
 </style>
 </head>
 <body>
 
-<div id="setup" class="setup-screen">
-    <h1 style="color:var(--accent)">GRAVITY MAZE</h1>
-    <p>タブレットを傾けてボールを操作します</p>
-    <p style="font-size:12px; color:var(--muted)">※センサーの利用許可が必要です</p>
-    <button class="btn" id="start-btn">センサーを許可して開始</button>
+<div id="miss-flash"></div>
+<div class="ui-layer">
+    <div>
+        <span class="stats-badge" id="info">Trial: 0/--</span>
+        <span class="stats-badge error" id="error-info">Miss: 0/--</span>
+    </div>
+    <span class="stats-badge" id="live-rough">Rough: --%</span>
 </div>
 
-<div class="ui-layer">
-    <span class="stats-badge" id="info">Trial: 0/100</span>
-    <span class="stats-badge" id="live-eff">Efficiency: --%</span>
+<div id="setup" class="setup-screen">
+    <h1 style="color:var(--accent); margin-bottom:10px;">STEERING EXP</h1>
+    <div class="level-outer"><div class="level-target"></div><div id="bubble" class="level-bubble"></div></div>
+    
+    <label style="color:#9aa0c4; margin-bottom:5px; font-size:14px;">試行回数を選択:</label>
+    <select id="trial-select">
+        <option value="30">30 Trials</option>
+        <option value="40" selected>40 Trials</option>
+        <option value="50">50 Trials</option>
+        <option value="60">60 Trials</option>
+        <option value="70">70 Trials</option>
+        <option value="80">80 Trials</option>
+        <option value="90">90 Trials</option>
+        <option value="100">100 Trials</option>
+    </select>
+
+    <p id="level-status" style="color:var(--accent); margin-bottom:20px;">水平にして開始</p>
+    <button class="btn" id="start-btn">実験開始</button>
 </div>
 
 <canvas id="game-canvas"></canvas>
 
 <div id="overlay" class="overlay">
-    <div class="overlay-box">
-        <h2 style="color:var(--accent)">RESULT</h2>
-        <div id="final-summary" style="margin-bottom:10px; font-weight:bold;"></div>
+    <h2 id="result-title" style="color:var(--accent); margin-top: 0;">RESULT</h2>
+    
+    <div id="result-content" style="width:100%; display:flex; flex-direction:column; align-items:center;">
+        <div class="summary-box" id="avg-time">Avg Time: --s</div>
         <div class="chart-container"><canvas id="timeChart"></canvas></div>
-        <div class="chart-container"><canvas id="effChart"></canvas></div>
-        <button class="btn" onclick="location.reload()" style="font-size:16px">RETRY</button>
+        <div class="summary-box" id="avg-rough">Avg Rough: --%</div>
+        <div class="chart-container"><canvas id="roughChart"></canvas></div>
     </div>
+    
+    <button class="btn" id="download-btn" style="background:var(--success); color:white; margin-bottom:10px;">CSV Download</button>
+    <button class="btn" onclick="location.reload()">再試行</button>
 </div>
 
 <script>
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
-let totalTrials = 40; // テスト用に40回に設定
-let currentTrial = 0;
-let trialLogs = [];
-let ball, target, running = false;
-let accel = { x: 0, y: 0 };
+const bubbleEl = document.getElementById('bubble');
+const statusEl = document.getElementById('level-status');
+
+// --- パラメータ設定 ---
+const moveSensitivity = 0.45;
+const pathWidth = 200; // カプセル領域を大きく修正
+const ballRadius = 12;
 const friction = 0.98;
 
-let lastBallPos = { x: 0, y: 0 };
-let totalDistance = 0, initialDistance = 0, startTime = 0;
+let totalTrials = 40;
+let currentTrial = 0;
+let missCount = 0;
+let maxMissAllowed = 0;
+let trialLogs = [];
+let ball = { x: 0, y: 0, vx: 0, vy: 0 };
+let target = { x: 0, y: 0, radius: 30 };
+let running = false;
+let accel = { x: 0, y: 0 };
+let startPos = { x: 0, y: 0 };
+let lastBallPos = { x: 0, y: 0 }, totalDistance = 0, initialDistance = 0, startTime = 0;
 
-function initCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+function updateLevel() {
+    if (running) return;
+    const dispX = accel.x * moveSensitivity * 15;
+    const dispY = accel.y * moveSensitivity * 15;
+    bubbleEl.style.transform = `translate(calc(-50% + ${Math.max(-70, Math.min(70, dispX))}px), calc(-50% + ${Math.max(-70, Math.min(70, dispY))}px))`;
+    if (Math.abs(accel.x) < 0.1 && Math.abs(accel.y) < 0.1) {
+        bubbleEl.style.background = '#2ecc71'; statusEl.textContent = "READY";
+    } else {
+        bubbleEl.style.background = 'var(--accent)'; statusEl.textContent = "水平にしてください";
+    }
+    requestAnimationFrame(updateLevel);
 }
 
-class Entity {
-    constructor(x, y, radius, color) {
-        this.x = x; this.y = y; this.radius = radius; this.color = color;
-        this.vx = 0; this.vy = 0;
-    }
-    draw() {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
-        ctx.fillStyle = this.color;
-        ctx.fill();
-        if(this.color === 'transparent') {
-            ctx.strokeStyle = '#4cc9f0'; ctx.lineWidth = 3; ctx.stroke();
-        }
-    }
-}
-
-function spawnTarget() {
-    const margin = 80;
-    target = new Entity(
-        margin + Math.random() * (canvas.width - margin*2),
-        margin + Math.random() * (canvas.height - margin*2),
-        35, 'transparent'
-    );
-    initialDistance = Math.hypot(ball.x - target.x, ball.y - target.y);
+function spawnNextTarget() {
+    startPos = { x: ball.x, y: ball.y };
+    const margin = 100;
+    target.x = margin + Math.random() * (canvas.width - margin * 2);
+    target.y = margin + Math.random() * (canvas.height - margin * 2);
     totalDistance = 0;
     lastBallPos = { x: ball.x, y: ball.y };
+    initialDistance = Math.hypot(startPos.x - target.x, startPos.y - target.y);
     startTime = performance.now();
+}
+
+function distToSegment(p, v, w) {
+    const l2 = Math.hypot(v.x - w.x, v.y - w.y) ** 2;
+    if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
+    let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
 }
 
 function update() {
     if(!running) return;
 
-    ball.vx += accel.x * 0.5;
-    ball.vy += accel.y * 0.5;
+    ball.vx += accel.x * moveSensitivity;
+    ball.vy += accel.y * moveSensitivity;
     ball.vx *= friction; ball.vy *= friction;
     ball.x += ball.vx; ball.y += ball.vy;
 
     totalDistance += Math.hypot(ball.x - lastBallPos.x, ball.y - lastBallPos.y);
     lastBallPos = { x: ball.x, y: ball.y };
 
-    if(ball.x < ball.radius || ball.x > canvas.width - ball.radius) ball.vx *= -0.5;
-    if(ball.y < ball.radius || ball.y > canvas.height - ball.radius) ball.vy *= -0.5;
-    ball.x = Math.max(ball.radius, Math.min(canvas.width - ball.radius, ball.x));
-    ball.y = Math.max(ball.radius, Math.min(canvas.height - ball.radius, ball.y));
-
-    const currentEff = Math.min(100, (initialDistance / Math.max(initialDistance, totalDistance)) * 100);
-    document.getElementById('live-eff').textContent = `Eff: ${currentEff.toFixed(1)}%`;
-
-    if(Math.hypot(ball.x - target.x, ball.y - target.y) < ball.radius + target.radius) {
-        trialLogs.push({ time: (performance.now() - startTime)/1000, efficiency: currentEff });
-        currentTrial++;
-        document.getElementById('info').textContent = `Trial: ${currentTrial}/${totalTrials}`;
-        if(currentTrial >= totalTrials) finishGame();
-        else spawnTarget();
+    if (distToSegment(ball, startPos, target) > pathWidth / 2) {
+        handleFail();
+        requestAnimationFrame(update);
+        return;
     }
 
-    ctx.fillStyle = 'rgba(15, 18, 32, 0.4)'; // 残像効果
-    ctx.fillRect(0,0,canvas.width, canvas.height);
-    target.draw();
-    ball.draw();
+    const currentRough = (totalDistance / Math.max(1, initialDistance)) * 100;
+    document.getElementById('live-rough').textContent = `Rough: ${currentRough.toFixed(0)}%`;
+
+    if(Math.hypot(ball.x - target.x, ball.y - target.y) < ballRadius + target.radius) {
+        trialLogs.push({ time: (performance.now() - startTime) / 1000, roughness: currentRough });
+        currentTrial++;
+        document.getElementById('info').textContent = `Trial: ${currentTrial}/${totalTrials}`;
+        if(currentTrial >= totalTrials) { running = false; finishGame(false); return; }
+        spawnNextTarget();
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.beginPath();
+    ctx.lineWidth = pathWidth; ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(76, 201, 240, 0.12)';
+    ctx.moveTo(startPos.x, startPos.y); ctx.lineTo(target.x, target.y); ctx.stroke();
+    
+    ctx.beginPath(); ctx.arc(target.x, target.y, target.radius, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(76,201,240,0.8)'; ctx.lineWidth = 3; ctx.stroke();
+    
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, ballRadius, 0, Math.PI*2);
+    ctx.fillStyle = '#4cc9f0'; ctx.fill();
+
     requestAnimationFrame(update);
 }
 
-// センサー許可の核心部分
-document.getElementById('start-btn').addEventListener('click', async () => {
-    try {
-        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-            // iOS用
-            const response = await DeviceOrientationEvent.requestPermission();
-            if (response === 'granted') {
-                activateSensor();
-            } else {
-                alert('センサーの利用が拒否されました。設定を確認してください。');
-            }
-        } else {
-            // AndroidやPC用
-            activateSensor();
-        }
-    } catch (e) {
-        alert('エラーが発生しました: ' + e);
+function handleFail() {
+    missCount++;
+    document.getElementById('error-info').textContent = `Miss: ${missCount}/${maxMissAllowed}`;
+    
+    const flash = document.getElementById('miss-flash');
+    flash.style.display = 'block';
+    setTimeout(() => { flash.style.display = 'none'; }, 150);
+    
+    if (missCount > maxMissAllowed) {
+        running = false;
+        finishGame(true);
+        return;
     }
+
+    ball.x = startPos.x; ball.y = startPos.y;
+    ball.vx = 0; ball.vy = 0;
+    totalDistance = 0;
+    lastBallPos = { x: ball.x, y: ball.y };
+    startTime = performance.now();
+}
+
+window.addEventListener('deviceorientation', (e) => {
+    accel.x = e.gamma / 8; accel.y = e.beta / 8;
 });
+updateLevel();
 
-function activateSensor() {
-    window.addEventListener('deviceorientation', (e) => {
-        // 画面の向き（縦・横）を考慮
-        const orientation = window.orientation || 0;
-        if (orientation === 0) { // 縦持ち
-            accel.x = e.gamma / 7;
-            accel.y = e.beta / 7;
-        } else { // 横持ち
-            accel.x = (orientation === 90 ? e.beta : -e.beta) / 7;
-            accel.y = (orientation === 90 ? -e.gamma : e.gamma) / 7;
-        }
-    }, true);
-
+document.getElementById('start-btn').onclick = async () => {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        await DeviceOrientationEvent.requestPermission();
+    }
+    totalTrials = parseInt(document.getElementById('trial-select').value);
+    maxMissAllowed = Math.floor(totalTrials * 0.1);
+    
+    document.getElementById('info').textContent = `Trial: 0/${totalTrials}`;
+    document.getElementById('error-info').textContent = `Miss: 0/${maxMissAllowed}`;
     document.getElementById('setup').style.display = 'none';
-    initCanvas();
-    ball = new Entity(canvas.width/2, canvas.height/2, 18, '#4cc9f0');
-    spawnTarget();
+    
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    ball.x = canvas.width / 2; ball.y = canvas.height / 2;
+    spawnNextTarget();
     running = true;
     update();
-}
+};
 
-function finishGame() {
-    running = false;
+function finishGame(isGameOver) {
     document.getElementById('overlay').style.display = 'flex';
-    renderStatChart('timeChart', 'time', 'Time (s)', '#4cc9f0');
-    renderStatChart('effChart', 'efficiency', 'Path Efficiency (%)', '#ffde03');
+    const title = document.getElementById('result-title');
+    const content = document.getElementById('result-content');
+    
+    if (isGameOver) {
+        title.textContent = "GAME OVER";
+        title.style.color = "var(--danger)";
+        content.style.display = "none";
+        document.getElementById('download-btn').style.display = "none";
+    } else {
+        title.textContent = "EXPERIMENT COMPLETE";
+        title.style.color = "var(--success)";
+        content.style.display = "flex";
+        
+        const avgTime = trialLogs.reduce((a, b) => a + b.time, 0) / trialLogs.length;
+        const avgRough = trialLogs.reduce((a, b) => a + b.roughness, 0) / trialLogs.length;
+        document.getElementById('avg-time').textContent = `Avg Time: ${avgTime.toFixed(2)}s`;
+        document.getElementById('avg-rough').textContent = `Avg Roughness: ${avgRough.toFixed(1)}%`;
+
+        renderStatChart('timeChart', 'time', 'Time (s)', '#4cc9f0');
+        renderStatChart('roughChart', 'roughness', 'Roughness (%)', '#ffde03');
+    }
 }
 
-function renderStatChart(canvasId, key, label, color) {
-    const labels = [], averages = [], errors = [];
-    for (let i = 0; i < trialLogs.length; i += 10) {
-        const chunk = trialLogs.slice(i, i + 10).map(d => d[key]);
-        const m = chunk.reduce((a,b)=>a+b)/chunk.length;
-        const sd = Math.sqrt(chunk.reduce((a,b)=>a+(b-m)**2,0)/chunk.length);
-        averages.push(m);
-        errors.push(chunk.length > 1 ? sd/Math.sqrt(chunk.length) : 0);
-        labels.push(`${i+1}-${i+10}`);
+document.getElementById('download-btn').onclick = () => {
+    let csv = "Trial,Time_sec,Roughness_percent\n";
+    trialLogs.forEach((l, i) => csv += `${i+1},${l.time.toFixed(3)},${l.roughness.toFixed(1)}\n`);
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `steering_data_${totalTrials}trials.csv`;
+    a.click();
+};
+
+function renderStatChart(canvasId, key, labelName, color) {
+    const labels = [], averages = [];
+    const chunkSize = 10;
+    
+    for (let i = 0; i < trialLogs.length; i += chunkSize) {
+        const chunk = trialLogs.slice(i, i + chunkSize).map(d => d[key]);
+        averages.push(chunk.reduce((a, b) => a + b, 0) / chunk.length);
+        labels.push(`${i+1}-${Math.min(i+chunkSize, trialLogs.length)}`);
     }
+
     new Chart(document.getElementById(canvasId), {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [{ data: averages, borderColor: color, backgroundColor: color+'22', fill: true, tension: 0.3 }]
+            datasets: [{ label: labelName, data: averages, borderColor: color, backgroundColor: color + '33', fill: true }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false }, title: { display: true, text: label, color: '#fff' } },
-            scales: { y: { ticks: { color: '#9aa0c4' } }, x: { ticks: { color: '#9aa0c4' } } }
+            plugins: { legend: { labels: { color: '#fff', size: 10 } } },
+            scales: {
+                y: { ticks: { color: '#9aa0c4', font: { size: 10 } } },
+                x: { ticks: { color: '#9aa0c4', font: { size: 10 } } }
+            }
         }
     });
 }
-window.onresize = initCanvas;
+window.onresize = () => { if(running) { canvas.width = window.innerWidth; canvas.height = window.innerHeight; } };
 </script>
 </body>
 </html>
