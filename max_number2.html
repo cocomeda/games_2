@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>最大数タップゲーム - グラフ解析版</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+:root {
+    --bg:#0f1220;
+    --panel:#1a1e35;
+    --cell:#242862;
+    --accent:#4cc9f0;
+    --danger:#ff4d6d;
+    --text:#fff;
+    --muted:#9aa0c4;
+}
+
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui, sans-serif; display:flex; justify-content:center; align-items:flex-start; min-height:100vh; padding: 20px 0; }
+
+.container { width:100%; max-width:520px; padding:24px; text-align:center; }
+h1 { font-size:26px; margin-bottom:10px; }
+#info { font-size:18px; color:var(--muted); margin-bottom:18px; }
+
+.section-label { font-size: 14px; color: var(--muted); margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 1px; }
+
+.controls { display:flex; justify-content:center; gap:10px; margin-bottom:10px; flex-wrap: wrap; }
+.controls button { background:var(--panel); color:var(--text); border:none; padding:10px 16px; border-radius:12px; font-size:16px; cursor:pointer; min-width: 60px; }
+.controls button.active { background:var(--accent); color:#000; font-weight:700; }
+
+.start-btn { margin:24px auto; padding:18px; width:80%; max-width:260px; font-size:22px; font-weight:800; border-radius:18px; border:none; background:var(--accent); color:#000; cursor:pointer; }
+
+.grid { display:grid; gap:18px; margin-top:20px; }
+.grid.four { grid-template-columns:repeat(2,1fr); }
+.grid.nine { grid-template-columns:repeat(3,1fr); }
+
+.cell { background:var(--cell); border-radius:18px; font-size:42px; font-weight:800; padding:38px 0; cursor:pointer; transition:transform .05s; }
+.cell:active { transform:scale(.96); }
+.cell.disabled { pointer-events:none; opacity:.5; }
+.cell.correct { outline:5px solid var(--accent); }
+
+/* 履歴セクション */
+.history-section { margin-top: 40px; text-align: left; background: var(--panel); padding: 20px; border-radius: 20px; }
+.history-item { border-bottom: 1px solid var(--cell); padding: 12px 0; font-size: 14px; }
+.history-item:last-child { border: none; }
+.history-date { color: var(--muted); font-size: 12px; }
+.history-stats { display: flex; justify-content: space-between; margin-top: 4px; }
+.history-avg { color: var(--accent); font-weight: bold; }
+
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,.92); display:none; justify-content:center; align-items:center; z-index:10; overflow-y: auto; padding: 20px 0;}
+.overlay.show { display:flex; }
+.overlay-box { background:var(--panel); padding:30px 20px; border-radius:22px; width:95%; max-width:480px; text-align: center;}
+.overlay h2 { font-size:32px; margin-bottom:12px; }
+
+/* グラフ表示エリア */
+.chart-container { width: 100%; height: 250px; margin: 20px 0; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 10px; }
+
+.result-label { font-size:12px; color:var(--muted); letter-spacing:.08em; margin-top:10px; }
+.result-value { font-size:32px; font-weight:800; color:var(--accent); }
+.retry { margin-top:20px; width:100%; padding:16px; font-size:18px; font-weight:700; border:none; border-radius:16px; background:var(--accent); cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>最大数タップ</h1>
+    <div id="info">設定を選んで START</div>
+
+    <div id="setup-area">
+        <div class="section-label">Grid Size</div>
+        <div class="controls">
+            <button class="size-btn" data-size="4">4</button>
+            <button class="size-btn active" data-size="9">9</button>
+        </div>
+
+        <div class="section-label">Trials</div>
+        <div class="controls">
+            <button class="trial-btn" data-trials="30">30</button>
+            <button class="trial-btn" data-trials="50">50</button>
+            <button class="trial-btn active" data-trials="100">100</button>
+        </div>
+        <button class="start-btn" id="startBtn">START</button>
+    </div>
+
+    <div class="grid nine" id="grid"></div>
+
+    <div id="history-area" class="history-section">
+        <div class="section-label" style="margin-top:0">Recent History</div>
+        <div id="history-list">履歴はありません</div>
+        <button id="clearHistory" style="background:none; border:none; color:var(--danger); font-size:12px; margin-top:10px; cursor:pointer;">履歴を消去</button>
+    </div>
+</div>
+
+<div class="overlay" id="overlay">
+    <div class="overlay-box">
+        <h2 id="overlayTitle"></h2>
+        <div id="stats"></div>
+        <div class="chart-container">
+            <canvas id="resultChart"></canvas>
+        </div>
+        <button class="retry" onclick="location.reload()">BACK</button>
+    </div>
+</div>
+
+<script>
+let totalTrials = 100;
+const MAX_MISS = 10;
+const STORAGE_KEY = "tap_game_results_v2";
+
+let gridSize = 9, currentTrial = 1, missCount = 0, reactionTimes = [], startTime = 0, started = false;
+// 試行ごとの生データ保存（nullはミス）
+let trialLogs = []; 
+
+const grid = document.getElementById("grid");
+const info = document.getElementById("info");
+const overlay = document.getElementById("overlay");
+const overlayTitle = document.getElementById("overlayTitle");
+const stats = document.getElementById("stats");
+const startBtn = document.getElementById("startBtn");
+const setupArea = document.getElementById("setup-area");
+const historyList = document.getElementById("history-list");
+
+displayHistory();
+
+document.querySelectorAll(".size-btn").forEach(btn => {
+    btn.onclick = () => {
+        gridSize = parseInt(btn.dataset.size);
+        document.querySelectorAll(".size-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        grid.className = "grid " + (gridSize === 4 ? "four" : "nine");
+    };
+});
+
+document.querySelectorAll(".trial-btn").forEach(btn => {
+    btn.onclick = () => {
+        totalTrials = parseInt(btn.dataset.trials);
+        document.querySelectorAll(".trial-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+    };
+});
+
+startBtn.onclick = startGame;
+
+document.getElementById("clearHistory").onclick = () => {
+    if(confirm("履歴をすべて削除しますか？")) {
+        localStorage.removeItem(STORAGE_KEY);
+        displayHistory();
+    }
+};
+
+function startGame(){
+    started = true;
+    setupArea.style.display = "none";
+    document.getElementById("history-area").style.display = "none";
+    startTrial();
+}
+
+function uniqueNumbers(count){
+    const set = new Set();
+    while(set.size < count){ set.add(Math.floor(Math.random() * 90) + 10); }
+    return [...set];
+}
+
+function startTrial(){
+    grid.replaceChildren();
+    const nums = uniqueNumbers(gridSize);
+    const max = Math.max(...nums);
+    requestAnimationFrame(() => { startTime = performance.now(); });
+
+    nums.forEach(n => {
+        const d = document.createElement("div");
+        d.className = "cell";
+        d.textContent = n;
+        d.onclick = () => handleClick(d, n, max);
+        grid.appendChild(d);
+    });
+    info.textContent = `Trial ${currentTrial} / ${totalTrials}`;
+}
+
+function handleClick(cell, num, max){
+    document.querySelectorAll(".cell").forEach(c => c.classList.add("disabled"));
+    const time = (performance.now() - startTime) / 1000;
+    
+    if(num === max){
+        reactionTimes.push(time);
+        trialLogs.push(time);
+        currentTrial++;
+        if(currentTrial > totalTrials) finishGame();
+        else requestAnimationFrame(startTrial);
+    } else {
+        missCount++;
+        trialLogs.push(null); // ミスを記録
+        document.querySelectorAll(".cell").forEach(c => { if(+c.textContent === max) c.classList.add("correct"); });
+        if(missCount >= MAX_MISS) gameOver();
+        else {
+            currentTrial++; // ミスしても次の試行へ
+            if(currentTrial > totalTrials) finishGame();
+            else requestAnimationFrame(startTrial);
+        }
+    }
+}
+
+function finishGame(){
+    // 異常値除外計算
+    const validTimes = reactionTimes;
+    const mean = validTimes.reduce((a, b) => a + b, 0) / validTimes.length;
+    const sd = Math.sqrt(validTimes.reduce((a, b) => a + (b - mean) ** 2, 0) / validTimes.length);
+    const filtered = validTimes.filter(t => Math.abs(t - mean) <= 2 * sd);
+    const finalAvg = filtered.reduce((a, b) => a + b, 0) / filtered.length;
+
+    saveResult(finalAvg, trialLogs, missCount);
+
+    overlay.classList.add("show");
+    overlayTitle.textContent = "CLEAR";
+    stats.innerHTML = `<div class="result-label">AVG(Filtered)</div><div class="result-value">${finalAvg.toFixed(3)}s</div>`;
+    
+    renderChart(trialLogs);
+}
+
+function gameOver(){
+    overlay.classList.add("show");
+    overlayTitle.textContent = "GAME OVER";
+    stats.innerHTML = `<div class="result-label">MISSES REACHED MAX</div><div class="result-value">${missCount}</div>`;
+}
+
+function renderChart(logs) {
+    const chunkSize = 10;
+    const labels = [];
+    const averages = [];
+    const errors = [];
+
+    for (let i = 0; i < logs.length; i += chunkSize) {
+        const chunk = logs.slice(i, i + chunkSize).filter(v => v !== null);
+        labels.push(`${i + 1}-${i + chunkSize}`);
+
+        if (chunk.length > 0) {
+            // チャンク内での2SD除外
+            const m = chunk.reduce((a, b) => a + b) / chunk.length;
+            const s = Math.sqrt(chunk.reduce((a, b) => a + (b - m) ** 2, 0) / chunk.length);
+            const f = chunk.filter(t => Math.abs(t - m) <= 2 * s);
+            
+            const chunkMean = f.reduce((a, b) => a + b) / f.length;
+            averages.push(chunkMean);
+            
+            // 標準誤差 (SE = SD / √n)
+            const chunkSD = Math.sqrt(f.reduce((a, b) => a + (b - chunkMean) ** 2, 0) / f.length);
+            const se = f.length > 1 ? chunkSD / Math.sqrt(f.length) : 0;
+            errors.push(se);
+        } else {
+            averages.push(null);
+            errors.push(0);
+        }
+    }
+
+    const ctx = document.getElementById('resultChart').getContext('2d');
+    
+    // エラーバー描画用カスタムプラグイン
+    const errorBarPlugin = {
+        id: 'errorBars',
+        afterDatasetsDraw: (chart) => {
+            const { ctx, scales: { x, y } } = chart;
+            ctx.save();
+            ctx.strokeStyle = '#4cc9f0';
+            ctx.lineWidth = 2;
+
+            chart.getDatasetMeta(0).data.forEach((point, index) => {
+                const val = averages[index];
+                const err = errors[index];
+                if (val === null || err === 0) return;
+
+                const yTop = y.getPixelForValue(val + err);
+                const yBottom = y.getPixelForValue(val - err);
+
+                // 垂直棒
+                ctx.beginPath();
+                ctx.moveTo(point.x, yTop);
+                ctx.lineTo(point.x, yBottom);
+                ctx.stroke();
+                
+                // ヒゲ
+                ctx.beginPath();
+                ctx.moveTo(point.x - 5, yTop); ctx.lineTo(point.x + 5, yTop);
+                ctx.moveTo(point.x - 5, yBottom); ctx.lineTo(point.x + 5, yBottom);
+                ctx.stroke();
+            });
+            ctx.restore();
+        }
+    };
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '平均反応時間(s)',
+                data: averages,
+                borderColor: '#4cc9f0',
+                backgroundColor: 'rgba(76, 201, 240, 0.2)',
+                tension: 0.1,
+                fill: false,
+                pointRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { 
+                    beginAtZero: false,
+                    grid: { color: 'rgba(255,255,255,0.1)' },
+                    ticks: { color: '#9aa0c4' }
+                },
+                x: { 
+                    grid: { display: false },
+                    ticks: { color: '#9aa0c4' }
+                }
+            },
+            plugins: { legend: { display: false } }
+        },
+        plugins: [errorBarPlugin]
+    });
+}
+
+function saveResult(avg, logs, misses) {
+    const results = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    results.unshift({
+        date: new Date().toLocaleString('ja-JP', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }),
+        avg: avg.toFixed(3),
+        misses: misses,
+        grid: gridSize,
+        trials: totalTrials
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(results.slice(0, 20)));
+}
+
+function displayHistory() {
+    const results = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    if (results.length === 0) {
+        historyList.innerHTML = "履歴はありません";
+        return;
+    }
+    historyList.innerHTML = results.map(res => `
+        <div class="history-item">
+            <div class="history-date">${res.date} (${res.grid}マス/${res.trials}回)</div>
+            <div class="history-stats">
+                <span>Miss: ${res.misses}</span>
+                <span class="history-avg">${res.avg} s</span>
+            </div>
+        </div>
+    `).join('');
+}
+</script>
+</body>
+</html>
