@@ -2,11 +2,11 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Survival of the Smartest: Knowledge Inheritance</title>
+    <title>Multi-Color Cognitive Evolution</title>
     <style>
         body { margin: 0; background: #020202; overflow: hidden; color: white; font-family: 'Consolas', monospace; }
         canvas { display: block; }
-        .stats { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 8px; border: 1px solid #444; min-width: 200px; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
+        .stats { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 8px; border: 1px solid #444; min-width: 220px; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
         .c-1 { color: #ff3333; } .c-2 { color: #3333ff; } .c-3 { color: #ffff33; } .c-4 { color: #ff33ff; }
         .val { font-weight: bold; float: right; }
@@ -15,8 +15,8 @@
 </head>
 <body>
     <div class="stats">
-        <b>EVOLUTION: INHERITANCE</b><hr style="border:0; border-top:1px solid #444">
-        草食 (継承型): <span id="hCount" class="val">0</span><br>
+        <b>FULL COLOR COGNITION</b><hr style="border:0; border-top:1px solid #444">
+        草食 (最強クローン): <span id="hCount" class="val">0</span><br>
         <div class="grid">
             <span class="c-1">RED: <span id="cnt1" class="val">0</span></span>
             <span class="c-2">BLUE: <span id="cnt2" class="val">0</span></span>
@@ -24,7 +24,7 @@
             <span class="c-4">PUR: <span id="cnt4" class="val">0</span></span>
         </div>
         <hr style="border:0; border-top:1px solid #444">
-        <span id="log">Awaiting next generation...</span>
+        <span id="log">Sensors Initializing...</span>
     </div>
     <canvas id="canvas"></canvas>
 
@@ -40,32 +40,32 @@ const TYPES = [
 
 let creatures = [];
 const MAX_TOTAL = 350;
-
-// --- 知識継承用の変数 ---
 let eliteHerbBrain = null;
 
 class Brain {
     constructor(weights = null) {
+        // 入力: 11個 (草食x2, 各肉食(4種)x2, 自己状態)
+        // 隠れ層: 8個
+        // 出力: 2個
         if (weights) {
-            // 継承時に少しだけ変異を加える (0.15の確率で値を変動)
-            this.w1 = weights.w1.map(v => Math.random() < 0.15 ? v + (Math.random() - 0.5) * 0.4 : v);
-            this.w2 = weights.w2.map(v => Math.random() < 0.15 ? v + (Math.random() - 0.5) * 0.4 : v);
+            this.w1 = weights.w1.map(v => Math.random() < 0.12 ? v + (Math.random() - 0.5) * 0.4 : v);
+            this.w2 = weights.w2.map(v => Math.random() < 0.12 ? v + (Math.random() - 0.5) * 0.4 : v);
         } else {
-            this.w1 = Array.from({length: 35}, () => Math.random() * 2 - 1);
-            this.w2 = Array.from({length: 10}, () => Math.random() * 2 - 1);
+            this.w1 = Array.from({length: 11 * 8}, () => Math.random() * 2 - 1);
+            this.w2 = Array.from({length: 8 * 2}, () => Math.random() * 2 - 1);
         }
     }
     predict(inputs) {
         let hidden = [];
-        for(let i=0; i<5; i++) {
+        for(let i=0; i<8; i++) {
             let sum = 0;
-            for(let j=0; j<7; j++) sum += inputs[j] * this.w1[i * 7 + j];
+            for(let j=0; j<11; j++) sum += inputs[j] * this.w1[i * 11 + j];
             hidden.push(Math.tanh(sum));
         }
         let outputs = [];
         for(let i=0; i<2; i++) {
             let sum = 0;
-            for(let j=0; j<5; j++) sum += hidden[j] * this.w2[i * 5 + j];
+            for(let j=0; j<8; j++) sum += hidden[j] * this.w2[i * 8 + j];
             outputs.push(Math.tanh(sum));
         }
         return outputs;
@@ -79,24 +79,27 @@ class Creature {
         this.energy = 200;
         this.angle = Math.random() * Math.PI * 2;
         this.brain = (brain instanceof Brain) ? brain : new Brain(brain);
-        this.baseSpeed = (type === 'herb') ? 5.5 : 3.6; 
+        this.baseSpeed = (type === 'herb') ? 5.6 : 3.7; 
     }
 
     update() {
-        let nTarget = this.getNearest(creatures.filter(c => 
-            (this.type === 'carn' && c.type === 'herb') || 
-            (this.type === 'herb' && c.type === 'carn')
-        ));
+        // --- 色彩センサーの処理 ---
+        let inputs = [];
+        
+        // 1. 草食動物センサー (2)
+        let nHerb = this.getNearest(creatures.filter(c => c.type === 'herb' && c !== this));
+        inputs.push(nHerb ? nHerb.dist / 350 : 1);
+        inputs.push(nHerb ? Math.atan2(nHerb.y - this.y, nHerb.x - this.x) - this.angle : 0);
 
-        let inputs = [
-            nTarget ? nTarget.dist / 350 : 1,
-            nTarget ? Math.atan2(nTarget.y - this.y, nTarget.x - this.x) - this.angle : 0,
-            this.energy / 400,
-            Math.sin(this.angle),
-            Math.cos(this.angle),
-            Math.random() * 0.1,
-            this.type === 'herb' ? 1 : 0
-        ];
+        // 2. 肉食動物個別センサー (4種 x 2 = 8)
+        TYPES.forEach(t => {
+            let nCarn = this.getNearest(creatures.filter(c => c.config && c.config.id === t.id && c !== this));
+            inputs.push(nCarn ? nCarn.dist / 350 : 1);
+            inputs.push(nCarn ? Math.atan2(nCarn.y - this.y, nCarn.x - this.x) - this.angle : 0);
+        });
+
+        // 3. 自己状態センサー (1)
+        inputs.push(this.energy / 400);
 
         let [turn, accel] = this.brain.predict(inputs);
         this.angle += turn * 0.25;
@@ -108,7 +111,7 @@ class Creature {
         if (this.y < 0) this.y = canvas.height; else if (this.y > canvas.height) this.y = 0;
 
         if (this.type === 'carn') {
-            this.energy -= (0.15 + speed * 0.18);
+            this.energy -= (0.2 + speed * 0.28);
             const sameKindCount = creatures.filter(c => c.config && c.config.id === this.config.id).length;
             if (this.energy <= 0) {
                 if (sameKindCount > 1) return false;
@@ -120,7 +123,7 @@ class Creature {
     }
 
     getNearest(list) {
-        let nearest = null, minDist = 400;
+        let nearest = null, minDist = 350;
         for (let item of list) {
             let d = Math.hypot(this.x - item.x, this.y - item.y);
             if (d < minDist) { minDist = d; nearest = {x: item.x, y: item.y, dist: d}; }
@@ -131,22 +134,14 @@ class Creature {
     checkHunt() {
         for (let i = creatures.length - 1; i >= 0; i--) {
             let target = creatures[i];
-            if (target.type === 'herb' && Math.hypot(this.x - target.x, this.y - target.y) < 18) {
-                this.energy += 120;
-                
-                // 最後の一匹が食べられる前に、その脳を記録する
+            if (target.type === 'herb' && Math.hypot(this.x - target.x, this.y - target.y) < 20) {
+                this.energy += 130;
                 if (creatures.filter(c => c.type === 'herb').length === 1) {
-                    eliteHerbBrain = {
-                        w1: [...target.brain.w1],
-                        w2: [...target.brain.w2]
-                    };
+                    eliteHerbBrain = { w1: [...target.brain.w1], w2: [...target.brain.w2] };
                 }
-                
                 creatures.splice(i, 1); 
                 if (creatures.length < MAX_TOTAL) {
-                    let baby = new Creature(this.x, this.y, 'carn', this.config, new Brain(this.brain));
-                    baby.energy = 160;
-                    creatures.push(baby);
+                    creatures.push(new Creature(this.x, this.y, 'carn', this.config, new Brain(this.brain)));
                 }
                 break;
             }
@@ -158,18 +153,16 @@ class Creature {
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.type === 'herb' ? 3.5 : 7, 0, Math.PI * 2);
         ctx.fill();
-        // 視線方向の表示
-        ctx.strokeStyle = "rgba(0,0,0,0.5)";
-        ctx.beginPath();
-        ctx.moveTo(this.x, this.y);
-        ctx.lineTo(this.x + Math.cos(this.angle)*5, this.y + Math.sin(this.angle)*5);
-        ctx.stroke();
+        // 識別のための小さな点
+        if(this.type === 'carn') {
+            ctx.fillStyle = "#000";
+            ctx.fillRect(this.x - 1, this.y - 1, 2, 2);
+        }
     }
 }
 
 function addHerbs(num, useElite = false) {
     for(let i=0; i<num; i++) {
-        // エリート脳があればそれを使い、なければ新規
         let brain = (useElite && eliteHerbBrain) ? new Brain(eliteHerbBrain) : null;
         creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb', null, brain));
     }
@@ -198,16 +191,12 @@ function animate() {
     }
 
     if (counts.herb === 0) {
-        addHerbs(50, true); // エリートの知識を継承して復活
-        document.getElementById('log').innerText = "NEW GENERATION: ELITE DNA REPLICATED";
+        addHerbs(50, true);
+        document.getElementById('log').innerText = "NEW WAVE: ELITE HERBS DESCENDED";
     }
 
     document.getElementById('hCount').innerText = counts.herb;
-    document.getElementById('cnt1').innerText = counts[1];
-    document.getElementById('cnt2').innerText = counts[2];
-    document.getElementById('cnt3').innerText = counts[3];
-    document.getElementById('cnt4').innerText = counts[4];
-
+    TYPES.forEach(t => document.getElementById(`cnt${t.id}`).innerText = counts[t.id]);
     requestAnimationFrame(animate);
 }
 
