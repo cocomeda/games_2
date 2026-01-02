@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>最大数タップゲーム - グラフ解析版</title>
+<title>最大数タップゲーム - 20試行解析版</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -22,13 +22,13 @@
 body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui, sans-serif; display:flex; justify-content:center; align-items:flex-start; min-height:100vh; padding: 20px 0; }
 
 .container { width:100%; max-width:520px; padding:24px; text-align:center; }
-h1 { font-size:26px; margin-bottom:10px; }
+h1 { font-size:24px; margin-bottom:10px; }
 #info { font-size:18px; color:var(--muted); margin-bottom:18px; }
 
-.section-label { font-size: 14px; color: var(--muted); margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 1px; }
+.section-label { font-size: 13px; color: var(--muted); margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 1px; }
 
-.controls { display:flex; justify-content:center; gap:10px; margin-bottom:10px; flex-wrap: wrap; }
-.controls button { background:var(--panel); color:var(--text); border:none; padding:10px 16px; border-radius:12px; font-size:16px; cursor:pointer; min-width: 60px; }
+.controls { display:flex; justify-content:center; gap:8px; margin-bottom:10px; flex-wrap: wrap; }
+.controls button { background:var(--panel); color:var(--text); border:none; padding:10px 14px; border-radius:12px; font-size:15px; cursor:pointer; min-width: 55px; }
 .controls button.active { background:var(--accent); color:#000; font-weight:700; }
 
 .start-btn { margin:24px auto; padding:18px; width:80%; max-width:260px; font-size:22px; font-weight:800; border-radius:18px; border:none; background:var(--accent); color:#000; cursor:pointer; }
@@ -42,7 +42,6 @@ h1 { font-size:26px; margin-bottom:10px; }
 .cell.disabled { pointer-events:none; opacity:.5; }
 .cell.correct { outline:5px solid var(--accent); }
 
-/* 履歴セクション */
 .history-section { margin-top: 40px; text-align: left; background: var(--panel); padding: 20px; border-radius: 20px; }
 .history-item { border-bottom: 1px solid var(--cell); padding: 12px 0; font-size: 14px; }
 .history-item:last-child { border: none; }
@@ -53,10 +52,8 @@ h1 { font-size:26px; margin-bottom:10px; }
 .overlay { position:fixed; inset:0; background:rgba(0,0,0,.92); display:none; justify-content:center; align-items:center; z-index:10; overflow-y: auto; padding: 20px 0;}
 .overlay.show { display:flex; }
 .overlay-box { background:var(--panel); padding:30px 20px; border-radius:22px; width:95%; max-width:480px; text-align: center;}
-.overlay h2 { font-size:32px; margin-bottom:12px; }
 
-/* グラフ表示エリア */
-.chart-container { width: 100%; height: 250px; margin: 20px 0; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 10px; }
+.chart-container { width: 100%; height: 260px; margin: 20px 0; background: rgba(255,255,255,0.03); border-radius: 12px; padding: 10px; }
 
 .result-label { font-size:12px; color:var(--muted); letter-spacing:.08em; margin-top:10px; }
 .result-value { font-size:32px; font-weight:800; color:var(--accent); }
@@ -75,10 +72,11 @@ h1 { font-size:26px; margin-bottom:10px; }
             <button class="size-btn active" data-size="9">9</button>
         </div>
 
-        <div class="section-label">Trials</div>
+        <div class="section-label">Trials (Total)</div>
         <div class="controls">
-            <button class="trial-btn" data-trials="30">30</button>
-            <button class="trial-btn" data-trials="50">50</button>
+            <button class="trial-btn" data-trials="40">40</button>
+            <button class="trial-btn" data-trials="60">60</button>
+            <button class="trial-btn" data-trials="80">80</button>
             <button class="trial-btn active" data-trials="100">100</button>
         </div>
         <button class="start-btn" id="startBtn">START</button>
@@ -95,7 +93,7 @@ h1 { font-size:26px; margin-bottom:10px; }
 
 <div class="overlay" id="overlay">
     <div class="overlay-box">
-        <h2 id="overlayTitle"></h2>
+        <h2 id="overlayTitle" style="font-size:32px; margin-bottom:10px;"></h2>
         <div id="stats"></div>
         <div class="chart-container">
             <canvas id="resultChart"></canvas>
@@ -107,10 +105,10 @@ h1 { font-size:26px; margin-bottom:10px; }
 <script>
 let totalTrials = 100;
 const MAX_MISS = 10;
-const STORAGE_KEY = "tap_game_results_v2";
+const STORAGE_KEY = "tap_game_results_v3";
+const CHUNK_SIZE = 20; // 20試行ごとに集計
 
 let gridSize = 9, currentTrial = 1, missCount = 0, reactionTimes = [], startTime = 0, started = false;
-// 試行ごとの生データ保存（nullはミス）
 let trialLogs = []; 
 
 const grid = document.getElementById("grid");
@@ -191,11 +189,11 @@ function handleClick(cell, num, max){
         else requestAnimationFrame(startTrial);
     } else {
         missCount++;
-        trialLogs.push(null); // ミスを記録
+        trialLogs.push(null); 
         document.querySelectorAll(".cell").forEach(c => { if(+c.textContent === max) c.classList.add("correct"); });
         if(missCount >= MAX_MISS) gameOver();
         else {
-            currentTrial++; // ミスしても次の試行へ
+            currentTrial++;
             if(currentTrial > totalTrials) finishGame();
             else requestAnimationFrame(startTrial);
         }
@@ -203,7 +201,6 @@ function handleClick(cell, num, max){
 }
 
 function finishGame(){
-    // 異常値除外計算
     const validTimes = reactionTimes;
     const mean = validTimes.reduce((a, b) => a + b, 0) / validTimes.length;
     const sd = Math.sqrt(validTimes.reduce((a, b) => a + (b - mean) ** 2, 0) / validTimes.length);
@@ -226,28 +223,31 @@ function gameOver(){
 }
 
 function renderChart(logs) {
-    const chunkSize = 10;
     const labels = [];
     const averages = [];
     const errors = [];
 
-    for (let i = 0; i < logs.length; i += chunkSize) {
-        const chunk = logs.slice(i, i + chunkSize).filter(v => v !== null);
-        labels.push(`${i + 1}-${i + chunkSize}`);
+    for (let i = 0; i < logs.length; i += CHUNK_SIZE) {
+        const chunk = logs.slice(i, i + CHUNK_SIZE).filter(v => v !== null);
+        labels.push(`${i + 1}-${Math.min(i + CHUNK_SIZE, totalTrials)}`);
 
         if (chunk.length > 0) {
-            // チャンク内での2SD除外
             const m = chunk.reduce((a, b) => a + b) / chunk.length;
             const s = Math.sqrt(chunk.reduce((a, b) => a + (b - m) ** 2, 0) / chunk.length);
+            // チャンク内での2SD除外（異常値・ノイズの除去）
             const f = chunk.filter(t => Math.abs(t - m) <= 2 * s);
             
-            const chunkMean = f.reduce((a, b) => a + b) / f.length;
-            averages.push(chunkMean);
-            
-            // 標準誤差 (SE = SD / √n)
-            const chunkSD = Math.sqrt(f.reduce((a, b) => a + (b - chunkMean) ** 2, 0) / f.length);
-            const se = f.length > 1 ? chunkSD / Math.sqrt(f.length) : 0;
-            errors.push(se);
+            if (f.length > 0) {
+                const chunkMean = f.reduce((a, b) => a + b) / f.length;
+                averages.push(chunkMean);
+                
+                const chunkSD = Math.sqrt(f.reduce((a, b) => a + (b - chunkMean) ** 2, 0) / f.length);
+                const se = f.length > 1 ? chunkSD / Math.sqrt(f.length) : 0;
+                errors.push(se);
+            } else {
+                averages.push(null);
+                errors.push(0);
+            }
         } else {
             averages.push(null);
             errors.push(0);
@@ -256,7 +256,6 @@ function renderChart(logs) {
 
     const ctx = document.getElementById('resultChart').getContext('2d');
     
-    // エラーバー描画用カスタムプラグイン
     const errorBarPlugin = {
         id: 'errorBars',
         afterDatasetsDraw: (chart) => {
@@ -273,16 +272,14 @@ function renderChart(logs) {
                 const yTop = y.getPixelForValue(val + err);
                 const yBottom = y.getPixelForValue(val - err);
 
-                // 垂直棒
                 ctx.beginPath();
                 ctx.moveTo(point.x, yTop);
                 ctx.lineTo(point.x, yBottom);
                 ctx.stroke();
                 
-                // ヒゲ
                 ctx.beginPath();
-                ctx.moveTo(point.x - 5, yTop); ctx.lineTo(point.x + 5, yTop);
-                ctx.moveTo(point.x - 5, yBottom); ctx.lineTo(point.x + 5, yBottom);
+                ctx.moveTo(point.x - 6, yTop); ctx.lineTo(point.x + 6, yTop);
+                ctx.moveTo(point.x - 6, yBottom); ctx.lineTo(point.x + 6, yBottom);
                 ctx.stroke();
             });
             ctx.restore();
@@ -294,13 +291,14 @@ function renderChart(logs) {
         data: {
             labels: labels,
             datasets: [{
-                label: '平均反応時間(s)',
+                label: 'Mean Reaction Time',
                 data: averages,
                 borderColor: '#4cc9f0',
                 backgroundColor: 'rgba(76, 201, 240, 0.2)',
                 tension: 0.1,
                 fill: false,
-                pointRadius: 4
+                pointRadius: 5,
+                pointBackgroundColor: '#4cc9f0'
             }]
         },
         options: {
@@ -308,11 +306,12 @@ function renderChart(logs) {
             maintainAspectRatio: false,
             scales: {
                 y: { 
-                    beginAtZero: false,
-                    grid: { color: 'rgba(255,255,255,0.1)' },
+                    title: { display: true, text: 'Time (s)', color: '#9aa0c4' },
+                    grid: { color: 'rgba(255,255,255,0.08)' },
                     ticks: { color: '#9aa0c4' }
                 },
                 x: { 
+                    title: { display: true, text: 'Trial Range', color: '#9aa0c4' },
                     grid: { display: false },
                     ticks: { color: '#9aa0c4' }
                 }
