@@ -147,7 +147,7 @@ class Creature {
         // 脳の推論と移動
         let [turn, accel] = this.brain.predict(inputs);
         this.angle += turn * 0.15;
-        let targetSpeed = this.maxSpeed * (0.6 + Math.abs(accel) * 0.4);
+        let targetSpeed = this.maxSpeed * (0.05 + Math.abs(accel) * 0.95);
         this.speed += (targetSpeed - this.speed) * 0.1;
 
         this.prevX = this.x; this.prevY = this.y;
@@ -160,7 +160,7 @@ class Creature {
 
         // 肉食動物の生命維持コストと狩り
         if(this.type === 'carn'){
-            this.energy -= (0.16 + this.speed * 0.1);
+            this.energy -= (0.05 + this.speed * 0.2);
             if(this.energy <= 0){
                 let sameKind = creatures.filter(c => c.config && c.config.id === this.config.id);
                 if(sameKind.length > 1) return false;
