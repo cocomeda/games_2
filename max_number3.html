@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>最大数タップ解析版</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{margin:0;background:#0f1220;color:#fff;font-family:sans-serif;text-align:center}
+.container{max-width:520px;margin:auto;padding:20px}
+.controls button{margin:4px;padding:10px 14px;border-radius:12px;border:none}
+.active{background:#4cc9f0;color:#000;font-weight:bold}
+.grid{display:grid;gap:12px;margin-top:20px}
+.grid.four{grid-template-columns:repeat(2,1fr)}
+.grid.nine{grid-template-columns:repeat(3,1fr)}
+.grid.sixteen{grid-template-columns:repeat(4,1fr)}
+.cell{background:#242862;border-radius:14px;font-size:32px;padding:30px 0}
+.hidden{color:transparent}
+</style>
+</head>
+<body>
+<div class="container">
+<h2>最大数タップ（解析）</h2>
+
+<div class="controls">
+<button class="size active" data-size="4">4</button>
+<button class="size" data-size="9">9</button>
+<button class="size" data-size="16">16</button>
+</div>
+
+<button id="start">START</button>
+<div id="info"></div>
+<div id="grid" class="grid nine"></div>
+
+<canvas id="chart1"></canvas>
+<canvas id="chart2"></canvas>
+<canvas id="chart3"></canvas>
+<canvas id="chart4"></canvas>
+</div>
+
+<script>
+let gridSize=4, trial=0, totalTrials=60;
+let logs=[];
+let startTime=0, hideTimer=null;
+
+document.querySelectorAll('.size').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('.size').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    gridSize=+b.dataset.size;
+    grid.className='grid '+(gridSize===4?'four':gridSize===9?'nine':'sixteen');
+  }
+});
+
+start.onclick=()=>{ logs=[]; trial=0; nextTrial(); };
+
+function nextTrial(){
+  trial++;
+  if(trial>totalTrials){ drawCharts(); return; }
+
+  grid.innerHTML='';
+  const nums=[...Array(gridSize)].map(()=>Math.floor(Math.random()*90+10));
+  const sorted=[...nums].sort((a,b)=>b-a);
+  const correct=sorted[0];
+
+  nums.forEach(n=>{
+    const d=document.createElement('div');
+    d.className='cell';
+    d.textContent=n;
+    d.onclick=()=>select(n,correct,sorted);
+    grid.appendChild(d);
+  });
+
+  startTime=performance.now();
+  info.textContent=`Trial ${trial}/${totalTrials}`;
+
+  hideTimer=setTimeout(()=>{
+    document.querySelectorAll('.cell').forEach(c=>c.classList.add('hidden'));
+  },1000);
+}
+
+function select(chosen,correct,sorted){
+  clearTimeout(hideTimer);
+  const rt=(performance.now()-startTime)/1000;
+  const rank=sorted.indexOf(chosen)+1;
+
+  logs.push({
+    trial,
+    chosen,
+    correct,
+    isCorrect:chosen===correct,
+    reactionTime:rt,
+    timestamp:performance.now(),
+    rankError:rank-1
+  });
+
+  nextTrial();
+}
+
+/* ==== 可視化 ==== */
+function drawCharts(){
+  // ①ミス数推移
+  const missCum=[];
+  let m=0;
+  logs.forEach(l=>{ if(!l.isCorrect)m++; missCum.push(m); });
+
+  new Chart(chart1,{
+    type:'line',
+    data:{labels:logs.map(l=>l.trial),
+      datasets:[{data:missCum,label:'Cumulative Miss'}]}
+  });
+
+  // ②反応速度
+  new Chart(chart2,{
+    type:'line',
+    data:{labels:logs.map(l=>l.trial),
+      datasets:[{data:logs.map(l=>l.isCorrect?l.reactionTime:null),
+      label:'Reaction Time (s)'}]}
+  });
+
+  // ③タイムスタンプ重ね
+  new Chart(chart3,{
+    type:'scatter',
+    data:{datasets:[{
+      data:logs.map(l=>({x:l.timestamp,y:l.reactionTime})),
+      label:'RT over Time'
+    }]}
+  });
+
+  // ④ミスの近さ
+  new Chart(chart4,{
+    type:'bar',
+    data:{labels:logs.map(l=>l.trial),
+      datasets:[{data:logs.map(l=>l.rankError),
+      label:'Rank Error (0=Correct)'}]}
+  });
+}
+</script>
+</body>
+</html>
