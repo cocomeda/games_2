@@ -160,7 +160,7 @@ class Creature {
 
         // 肉食動物の生命維持コストと狩り
         if(this.type === 'carn'){
-            this.energy -= (0.05 + this.speed * 0.2);
+            this.energy -= (0.05 + this.speed * 0.35);
             if(this.energy <= 0){
                 let sameKind = creatures.filter(c => c.config && c.config.id === this.config.id);
                 if(sameKind.length > 1) return false;
