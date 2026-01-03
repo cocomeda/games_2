@@ -152,7 +152,7 @@ class Creature {
         if(this.y<0) this.y=canvas.height; else if(this.y>canvas.height) this.y=0;
 
         if(this.type === 'carn'){
-            this.energy -= (0.02 + this.speed * 0.3);
+            this.energy -= (0.01 + this.speed * 0.2);
             if(this.energy <= 0){
                 let sameKind = creatures.filter(c => c.config && c.config.id === this.config.id);
                 if(sameKind.length > 1) return false;
