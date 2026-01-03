@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>戦略B強制 最大数順タップ 12-98</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{
+  margin:0;
+  background:#0f1220;
+  color:#fff;
+  font-family:system-ui,sans-serif;
+  text-align:center;
+}
+.container{
+  max-width:560px;
+  margin:auto;
+  padding:20px;
+}
+.controls button{
+  margin:4px;
+  padding:10px 14px;
+  border-radius:12px;
+  border:none;
+  cursor:pointer;
+}
+.controls .active{
+  background:#4cc9f0;
+  color:#000;
+  font-weight:bold;
+}
+#start{
+  margin:16px 0;
+  padding:14px 22px;
+  font-size:18px;
+  border-radius:16px;
+  border:none;
+  background:#4cc9f0;
+  color:#000;
+  cursor:pointer;
+}
+.grid{
+  display:grid;
+  gap:12px;
+  margin-top:20px;
+}
+.grid.four{grid-template-columns:repeat(2,1fr)}
+.grid.nine{grid-template-columns:repeat(3,1fr)}
+.cell{
+  background:#242862;
+  border-radius:14px;
+  font-size:32px;
+  font-weight:700;
+  padding:28px 0;
+  user-select:none;
+  border:3px solid transparent;
+  transition:border 0.1s;
+  pointer-events:none; /* 初期は押せない */
+}
+.cell.hidden{color:transparent}
+canvas{
+  margin-top:28px;
+  background:#1a1e35;
+  border-radius:12px;
+}
+.miss{
+  animation:flash 0.3s;
+}
+@keyframes flash{
+  0%{background:#e63946}
+  50%{background:#f1faee}
+  100%{background:#242862}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h2>戦略B強制 最大数順タップ</h2>
+
+  <div class="controls">
+    <button class="size active" data-size="4">4</button>
+    <button class="size" data-size="9">9</button>
+  </div>
+
+  <div class="controls">
+    <button class="trials active" data-count="20">20回</button>
+    <button class="trials" data-count="40">40回</button>
+    <button class="trials" data-count="60">60回</button>
+  </div>
+
+  <button id="start">START</button>
+  <div id="info"></div>
+
+  <div id="grid" class="grid four"></div>
+
+  <canvas id="chart1"></canvas>
+  <canvas id="chart2"></canvas>
+  <canvas id="chart3"></canvas>
+</div>
+
+<script>
+let gridSize = 4;
+let totalTrials = 20;
+const DISPLAY_TIME = 1500; // 数字を一瞬だけ表示
+const CHUNK_SIZE = 10;
+let trial = 0;
+let logs = [];
+let startTime = 0;
+let hideTimer = null;
+let order = [];
+
+let chart1Instance = null;
+let chart2Instance = null;
+let chart3Instance = null;
+
+const grid = document.getElementById("grid");
+const info = document.getElementById("info");
+
+document.querySelectorAll(".size").forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll(".size").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    gridSize = +b.dataset.size;
+    grid.className = "grid "+(gridSize===4?"four":"nine");
+  };
+});
+document.querySelectorAll(".trials").forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll(".trials").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    totalTrials = +b.dataset.count;
+  };
+});
+
+start.onclick = ()=>{
+  logs = [];
+  trial = 0;
+  destroyCharts();
+  nextTrial();
+};
+
+// 12-98の範囲で重複なしの数字生成
+function generateUniqueNumbers(size, min=12, max=98){
+  const nums = new Set();
+  while(nums.size<size){
+    nums.add(Math.floor(Math.random()*(max-min+1))+min);
+  }
+  return [...nums];
+}
+
+function nextTrial(delay=0){
+  setTimeout(()=>{
+    trial++;
+    if(trial>totalTrials){
+      drawCharts();
+      info.textContent="FINISHED";
+      return;
+    }
+
+    grid.innerHTML="";
+    info.textContent=`Trial ${trial} / ${totalTrials}`;
+
+    const nums = generateUniqueNumbers(gridSize);
+    nums.sort(()=>Math.random()-0.5);
+    order = [...nums].sort((a,b)=>b-a);
+
+    nums.forEach(n=>{
+      const d = document.createElement("div");
+      d.className="cell";
+      d.textContent=n;
+      d.onclick = ()=>select(n,d);
+      grid.appendChild(d);
+    });
+
+    // 数字消えるまで押せない
+    document.querySelectorAll(".cell").forEach(c=>c.style.pointerEvents="none");
+    startTime = performance.now();
+    hideTimer = setTimeout(()=>{
+      document.querySelectorAll(".cell").forEach(c=>{
+        c.classList.add("hidden");
+        c.style.pointerEvents="auto"; // 数字消えたら押せる
+      });
+    }, DISPLAY_TIME);
+
+    grid.dataset.nextIndex="0";
+  }, delay);
+}
+
+function select(chosen, elem){
+  const idx = +grid.dataset.nextIndex;
+  const correct = order[idx];
+  const rt = (performance.now()-startTime)/1000;
+
+  if(elem.dataset.pressed) return;
+  elem.dataset.pressed="1";
+
+  if(!logs[trial-1]) logs[trial-1]={stepTimes:[], success:true};
+
+  if(chosen===correct){
+    elem.style.border="3px solid #4cc9f0";
+    logs[trial-1].stepTimes.push(rt);
+    grid.dataset.nextIndex = idx+1;
+    if(idx+1>=gridSize){
+      Array.from(document.querySelectorAll(".cell")).forEach(c=>c.dataset.pressed=null);
+      setTimeout(()=>nextTrial(0),200);
+    }
+  } else {
+    elem.classList.add("miss");
+    elem.style.border="3px solid #e63946";
+    logs[trial-1].success=false;
+    logs[trial-1].stepTimes.push(rt);
+    Array.from(document.querySelectorAll(".cell")).forEach(c=>c.dataset.pressed=null);
+    setTimeout(()=>nextTrial(0),1000);
+  }
+}
+
+// チャンク解析
+function makeChunks(logs,size){
+  const chunks = [];
+  for(let i=0;i<logs.length;i+=size){
+    const c = logs.slice(i,i+size);
+    const success = c.filter(l=>l.success);
+    chunks.push({
+      index: chunks.length+1,
+      successRate: success.length/c.length,
+      lastTargetRT: success.map(l=>l.stepTimes[gridSize-1]),
+      target1RT: {
+        complete: c.filter(l=>l.success).map(l=>l.stepTimes[0]),
+        incomplete: c.filter(l=>!l.success).map(l=>l.stepTimes[0])
+      }
+    });
+  }
+  return chunks;
+}
+
+function destroyCharts(){
+  if(chart1Instance) chart1Instance.destroy();
+  if(chart2Instance) chart2Instance.destroy();
+  if(chart3Instance) chart3Instance.destroy();
+}
+
+function drawCharts(){
+  const chunks = makeChunks(logs,CHUNK_SIZE);
+
+  // ① チャンクごとの正答率
+  chart1Instance = new Chart(chart1,{
+    type:"line",
+    data:{
+      labels:chunks.map(c=>"C"+c.index),
+      datasets:[{
+        label:"Success Rate",
+        data:chunks.map(c=>c.successRate),
+        borderColor:"#4cc9f0",
+        backgroundColor:"rgba(76,201,240,0.2)",
+        tension:0.2
+      }]
+    },
+    options:{scales:{y:{min:0,max:1}}}
+  });
+
+  // ② 最後のターゲット正解までの平均時間
+  chart2Instance = new Chart(chart2,{
+    type:"line",
+    data:{
+      labels:chunks.map(c=>"C"+c.index),
+      datasets:[{
+        label:"Last Target RT (s)",
+        data:chunks.map(c=>{
+          const v=c.lastTargetRT;
+          const sum=v.reduce((a,b)=>a+b,0);
+          return v.length?sum/v.length:null;
+        }),
+        borderColor:"#f4a261",
+        backgroundColor:"rgba(244,162,97,0.2)",
+        tension:0.2
+      }]
+    },
+    options:{scales:{y:{title:{display:true,text:"Reaction Time (s)"}}}}
+  });
+
+  // ③ ターゲット1 正解トライアルの完答 vs 未完答
+  chart3Instance = new Chart(chart3,{
+    type:"line",
+    data:{
+      labels:chunks.map(c=>"C"+c.index),
+      datasets:[
+        {
+          label:"Target1 RT Complete",
+          data:chunks.map(c=>{
+            const v=c.target1RT.complete;
+            return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;
+          }),
+          borderColor:"#2a9d8f",
+          backgroundColor:"rgba(42,157,143,0.2)",
+          tension:0.2
+        },
+        {
+          label:"Target1 RT Incomplete",
+          data:chunks.map(c=>{
+            const v=c.target1RT.incomplete;
+            return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;
+          }),
+          borderColor:"#e76f51",
+          backgroundColor:"rgba(231,111,81,0.2)",
+          tension:0.2
+        }
+      ]
+    },
+    options:{scales:{y:{title:{display:true,text:"Reaction Time (s)"}}}}
+  });
+}
+</script>
+</body>
+</html>
