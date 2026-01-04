@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>1 to N タイムアタック</title>
+<title>1 to N タイムアタック + 分析</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 :root {
@@ -20,14 +22,14 @@ body {
     text-align: center;
     background-color: var(--bg);
     margin: 0;
-    padding: 10px; /* 全体のパディングを少し削る */
+    padding: 10px;
     user-select: none;
     color: var(--text);
 }
 
 .container {
-    width: 100%; /* 横幅いっぱい */
-    max-width: 1000px; /* PCでの広がりすぎ防止 */
+    width: 100%;
+    max-width: 800px;
     margin: 0 auto;
     padding: 15px;
     background: var(--panel);
@@ -44,16 +46,16 @@ body {
     padding: 0 10px;
 }
 
-.stats { font-size: 1.6em; font-weight: bold; }
+.stats { font-size: 1.4em; font-weight: bold; }
 #timer { color: var(--danger); }
-.next-num { font-size: 1.4em; color: var(--accent); }
+.next-num { font-size: 1.2em; color: var(--accent); }
 
 .settings { margin-bottom: 15px; font-weight: bold; font-size: 1.1em; }
 .settings select { font-size: 1em; padding: 8px 12px; border-radius: 8px; border: 1px solid #ddd; width: 60%; max-width: 300px; }
 
 .number-grid {
     display: grid;
-    gap: 6px; /* 隙間を少し狭くしてボタンを大きく */
+    gap: 8px;
     margin-bottom: 20px;
     background: #eee;
     padding: 8px;
@@ -74,6 +76,12 @@ body {
     cursor: pointer;
     transition: background 0.05s, transform 0.05s;
     -webkit-tap-highlight-color: transparent;
+    font-size: calc(50vw / var(--grid-size, 5));
+    line-height: 1;
+}
+
+@media (min-width: 800px) {
+    .num-btn { font-size: calc(400px / var(--grid-size, 5)); }
 }
 
 .num-btn:active { transform: scale(0.92); background: #f0f0f0; }
@@ -93,7 +101,18 @@ button.control-btn {
     max-width: 400px;
 }
 
-/* 履歴セクション */
+#result-screen {
+    display: none;
+    padding: 10px;
+}
+
+.chart-container {
+    position: relative;
+    margin: 20px auto;
+    height: 300px;
+    width: 100%;
+}
+
 .history-section {
     margin-top: 30px;
     text-align: left;
@@ -110,32 +129,15 @@ button.control-btn {
     align-items: center;
 }
 .history-list {
-    max-height: 400px;
+    max-height: 200px;
     overflow-y: auto;
 }
 .history-item {
     display: flex;
     justify-content: space-between;
-    padding: 10px 5px;
+    padding: 8px 5px;
     border-bottom: 1px solid #dee2e6;
-    font-size: 1em;
-}
-.history-item span.date { color: var(--muted); }
-.history-item span.result { font-weight: bold; color: var(--accent); }
-
-#result-message {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(255,255,255,0.98);
-    padding: 30px;
-    border-radius: 20px;
-    box-shadow: 0 0 40px rgba(0,0,0,0.4);
-    display: none;
-    z-index: 100;
-    width: 85%;
-    max-width: 450px;
+    font-size: 0.9em;
 }
 </style>
 </head>
@@ -152,8 +154,8 @@ button.control-btn {
                 <option value="25" selected>25 (5×5)</option>
                 <option value="36">36 (6×6)</option>
                 <option value="49">49 (7×7)</option>
-                <option value="64">64 (8×8)</option>
-                <option value="81">81 (9×9)</option>
+                <option value="64">64 (8×8)</option>               
+                <option value="81">81 (9×9)</option>             
             </select>
         </div>
         <button class="control-btn" onclick="startGame()">ゲーム開始</button>
@@ -165,7 +167,15 @@ button.control-btn {
             <div class="stats">Time: <span id="timer">0.00</span>s</div>
         </div>
         <div id="numberGrid" class="number-grid"></div>
-        <button class="control-btn" style="background:#666; margin-top:10px;" onclick="location.reload()">タイトルへ</button>
+        <button class="control-btn" style="background:#666; margin-top:10px;" onclick="location.reload()">中止</button>
+    </div>
+
+    <div id="result-screen">
+        <h2 id="finalTimeText"></h2>
+        <div class="chart-container">
+            <canvas id="speedChart"></canvas>
+        </div>
+        <button class="control-btn" onclick="location.reload()">もう一度挑戦</button>
     </div>
 
     <div class="history-section" id="historySection">
@@ -177,18 +187,16 @@ button.control-btn {
     </div>
 </div>
 
-<div id="result-message">
-    <h2 id="finalTimeText"></h2>
-    <button class="control-btn" onclick="closeResult()">もう一度挑戦</button>
-</div>
-
 <script>
 let nextNumber = 1;
 let startTime;
+let lastTapTime;
+let tapLogs = []; // 各数字を押した時の時刻を記録
 let timerInterval;
 let isGameActive = false;
 let MAX_NUMBER = 25;
-const STORAGE_KEY = "1toN_history_v2";
+let speedChart = null;
+const STORAGE_KEY = "1toN_history_v3";
 
 displayHistory();
 
@@ -199,21 +207,17 @@ function startGame() {
     MAX_NUMBER = parseInt(sizeSelect.value, 10);
     const gridSize = Math.sqrt(MAX_NUMBER);
 
+    grid.style.setProperty('--grid-size', gridSize);
     grid.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
-
-    // フォントサイズを動的に調整
-    const fontSizeMap = { 4: 2.2, 5: 1.8, 6: 1.5, 7: 1.2, 8: 1.0, 9: 0.9 };
-    const fontSize = fontSizeMap[gridSize] || 1.0;
 
     grid.innerHTML = '';
     nextNumber = 1;
+    tapLogs = [];
     document.getElementById('targetDisplay').textContent = nextNumber;
     document.getElementById('timer').textContent = '0.00';
     document.getElementById('setup-area').style.display = 'none';
     document.getElementById('historySection').style.display = 'none';
     document.getElementById('game-area').style.display = 'block';
-
-    clearInterval(timerInterval);
 
     let numbers = Array.from({ length: MAX_NUMBER }, (_, i) => i + 1);
     for (let i = numbers.length - 1; i > 0; i--) {
@@ -226,16 +230,14 @@ function startGame() {
         btn.className = 'num-btn';
         btn.textContent = num;
         btn.id = `num-${num}`;
-        btn.style.fontSize = fontSize + 'rem';
-
         btn.addEventListener('touchstart', e => { handleNumberClick(num); e.preventDefault(); });
         btn.addEventListener('mousedown', e => { handleNumberClick(num); });
-
         grid.appendChild(btn);
     });
 
     isGameActive = true;
     startTime = Date.now();
+    lastTapTime = startTime; 
     timerInterval = setInterval(updateTimer, 10);
 }
 
@@ -250,6 +252,11 @@ function handleNumberClick(num) {
     if (btn.classList.contains('pressed')) return;
 
     if (num === nextNumber) {
+        const now = Date.now();
+        const lapTime = (now - lastTapTime) / 1000;
+        tapLogs.push(lapTime); // 前のタップ（または開始）からの経過秒数を記録
+        lastTapTime = now;
+
         btn.classList.add('pressed');
         if (nextNumber === MAX_NUMBER) {
             finishGame();
@@ -267,9 +274,54 @@ function finishGame() {
     isGameActive = false;
     clearInterval(timerInterval);
     const finalTime = document.getElementById('timer').textContent;
+    
     saveResult(finalTime, MAX_NUMBER);
-    document.getElementById('finalTimeText').textContent = `クリア！記録: ${finalTime}秒`;
-    document.getElementById('result-message').style.display = 'block';
+    
+    document.getElementById('game-area').style.display = 'none';
+    document.getElementById('result-screen').style.display = 'block';
+    document.getElementById('finalTimeText').textContent = `Clear! ${finalTime}s`;
+    
+    drawChart();
+}
+
+function drawChart() {
+    const ctx = document.getElementById('speedChart').getContext('2d');
+    const labels = Array.from({ length: MAX_NUMBER }, (_, i) => i + 1);
+
+    if (speedChart) speedChart.destroy();
+
+    speedChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'タップ間隔 (秒)',
+                data: tapLogs,
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: '秒' }
+                },
+                x: {
+                    title: { display: true, text: '数字' }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
 }
 
 function saveResult(time, size) {
@@ -280,36 +332,28 @@ function saveResult(time, size) {
         size: size
     };
     history.unshift(newRecord);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(0, 50)));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(0, 20)));
 }
 
 function displayHistory() {
     const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
     const list = document.getElementById('historyList');
-    if (history.length === 0) {
-        list.innerHTML = "履歴はありません";
-        return;
-    }
+    if (history.length === 0) return;
     list.innerHTML = history.map(item => `
         <div class="history-item">
-            <span class="date">${item.date} (${item.size}マス)</span>
-            <span class="result">${item.time}s</span>
+            <span>${item.date} (${item.size})</span>
+            <span style="font-weight:bold; color:var(--accent);">${item.time}s</span>
         </div>
     `).join('');
 }
 
 function clearHistory() {
-    if(confirm("全ての履歴を削除しますか？")) {
+    if(confirm("履歴を削除しますか？")) {
         localStorage.removeItem(STORAGE_KEY);
-        displayHistory();
+        location.reload();
     }
-}
-
-function closeResult() {
-    location.reload();
 }
 </script>
 
 </body>
 </html>
-
