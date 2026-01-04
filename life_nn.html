@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Evolution v3.0 - Neural Swarm</title>
+<title>Evolution v3.1 - Selective Elite</title>
 <style>
 body { margin:0; background:#010101; overflow:hidden; color:white; font-family:'Consolas',monospace; }
 canvas{ display:block; }
@@ -20,7 +20,7 @@ hr { border:0; border-top:1px solid #333; margin: 8px 0; }
 </head>
 <body>
 <div class="stats">
-    <b>EVOLUTION v3.0 (18-12-8-2 NN)</b>
+    <b>EVOLUTION v3.1 (Elite Selection)</b>
     <hr>
     <div class="row c-herb">
         <span>HERB (草食): <span id="hCount" class="val">0</span></span>
@@ -74,7 +74,7 @@ const TYPES = [
 ];
 
 let creatures = [];
-const MAX_TOTAL = 400;
+const MAX_TOTAL = 450;
 
 class Brain {
     constructor(weights=null) {
@@ -111,10 +111,7 @@ class Brain {
             for(let j=0; j<this.h1Size; j++) sum += h1[j] * this.w2[i*this.h1Size+j];
             h2[i] = Math.tanh(sum);
         }
-        return [
-            Math.tanh(this.dot(h2, this.w3.slice(0, 8))), 
-            Math.tanh(this.dot(h2, this.w3.slice(8, 16)))
-        ];
+        return [Math.tanh(this.dot(h2, this.w3.slice(0, 8))), Math.tanh(this.dot(h2, this.w3.slice(8, 16)))];
     }
     dot(a, b){ return a.reduce((s, x, i) => s + x * b[i], 0); }
 }
@@ -135,11 +132,9 @@ class Creature {
         if(this.flash > 0) this.flash--;
         let inputs = [];
         
-        // 1. 最寄りの草食動物 (2)
         let nHerb = this.getNearest(creatures.filter(c => c.type==='herb' && c!==this));
         inputs.push(nHerb ? nHerb.dist/600 : 1, nHerb ? nHerb.angle/Math.PI : 0);
 
-        // 2. 各タイプの肉食動物の情報 (4x3=12)
         TYPES.forEach(t => {
             let n = this.getNearest(creatures.filter(c => c.config && c.config.id === t.id && c!==this));
             if(n){
@@ -149,24 +144,20 @@ class Creature {
             }
         });
         
-        // 3. 自身のエネルギー (1)
         inputs.push(this.energy/400);
 
-        // 4. 周辺の仲間数 (1) 半径200px以内
         let friendsCount = creatures.filter(c => {
             if(this.type === 'herb') return c.type === 'herb' && c !== this;
             return c.config && this.config && c.config.id === this.config.id && c !== this;
         }).filter(c => Math.hypot(c.x - this.x, c.y - this.y) < 200).length;
         inputs.push(friendsCount / 10);
 
-        // 5. 環境ストレス/予備入力 (2)
         inputs.push(creatures.filter(c => c.type === 'carn').length / 50);
         inputs.push(Math.sin(this.angle));
 
-        // 推論
         let [turn, accel] = this.brain.predict(inputs);
         this.angle += turn * 0.15;
-        let targetSpeed = this.maxSpeed * (0.05 + Math.abs(accel) * 0.95);
+        let targetSpeed = this.maxSpeed * (0.6 + Math.abs(accel) * 0.4);
         this.speed += (targetSpeed - this.speed) * 0.1;
 
         this.prevX = this.x; this.prevY = this.y;
@@ -177,7 +168,7 @@ class Creature {
         if(this.y<0) this.y=canvas.height; else if(this.y>canvas.height) this.y=0;
 
         if(this.type === 'carn'){
-            this.energy -= (0.05 + this.speed * 0.2);
+            this.energy -= (0.16 + this.speed * 0.2);
             if(this.energy <= 0){
                 let sameKind = creatures.filter(c => c.config && c.config.id === this.config.id);
                 if(sameKind.length > 1) return false;
@@ -265,19 +256,17 @@ function loadBrain(event, typeId) {
     reader.onload = (e) => {
         try {
             const weights = JSON.parse(e.target.result);
-            // 同種の既存個体を全削除
             creatures = creatures.filter(c => {
                 if (typeId === 'herb') return c.type !== 'herb';
                 return !(c.type === 'carn' && c.config.id === typeId);
             });
-            // 読み込んだ脳で3体追加
             if(typeId === 'herb') {
                 for(let i=0; i<3; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb', null, new Brain(weights)));
             } else {
                 const config = TYPES.find(t => t.id === typeId);
                 for(let i=0; i<3; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'carn', config, new Brain(weights)));
             }
-            updateLog(`置換完了: 3体のエリートを配置`);
+            updateLog(`置換完了`);
         } catch(err) { alert("無効なファイルです"); }
     };
     reader.readAsText(file);
@@ -301,18 +290,45 @@ function animate(){
     ctx.fillStyle = 'rgba(1, 1, 1, 0.25)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     let counts = { herb:0, 1:0, 2:0, 3:0 };
+    let herbList = [];
+
     for(let i=creatures.length-1; i>=0; i--){
-        if(!creatures[i].update()) creatures.splice(i, 1);
-        else {
+        if(!creatures[i].update()) {
+            creatures.splice(i, 1);
+        } else {
             creatures[i].draw();
-            if(creatures[i].type === 'herb') counts.herb++;
-            else counts[creatures[i].config.id]++;
+            if(creatures[i].type === 'herb') {
+                counts.herb++;
+                herbList.push(creatures[i]);
+            } else {
+                counts[creatures[i].config.id]++;
+            }
         }
     }
+
+    // --- 草食動物の世代交代ロジック ---
+    // 10個体になったら、その中から1つ選んで変異させた50個を追加
+    if(counts.herb === 10) {
+        const elite = herbList[Math.floor(Math.random() * herbList.length)];
+        elite.flash = 50; // 選ばれた個体を光らせる
+        
+        for(let i=0; i<50; i++) {
+            let childBrain = new Brain({
+                w1: Array.from(elite.brain.w1),
+                w2: Array.from(elite.brain.w2),
+                w3: Array.from(elite.brain.w3)
+            });
+            childBrain.mutate(0.1); // 選ばれたエリートから少し変異させる
+            creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb', null, childBrain));
+        }
+        updateLog("次世代の草食群を投入 (Elite Selection)");
+    }
+    // もし完全に全滅した場合の救済措置
     if(counts.herb === 0) {
         for(let i=0; i<50; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb'));
-        updateLog("草食動物リスポーン");
+        updateLog("草食動物リセット");
     }
+
     document.getElementById('hCount').innerText = counts.herb;
     document.getElementById('cnt1').innerText = counts[1];
     document.getElementById('cnt2').innerText = counts[2];
