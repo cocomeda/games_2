@@ -157,7 +157,7 @@ class Creature {
 
         let [turn, accel] = this.brain.predict(inputs);
         this.angle += turn * 0.15;
-        let targetSpeed = this.maxSpeed * (0.1 + Math.abs(accel) * 0.9);
+        let targetSpeed = this.maxSpeed * (0.05 + Math.abs(accel) * 0.95);
         this.speed += (targetSpeed - this.speed) * 0.1;
 
         this.prevX = this.x; this.prevY = this.y;
@@ -168,7 +168,7 @@ class Creature {
         if(this.y<0) this.y=canvas.height; else if(this.y>canvas.height) this.y=0;
 
         if(this.type === 'carn'){
-            this.energy -= (0.16 + this.speed * 0.25);
+            this.energy -= (0.05 + this.speed * 0.3);
             if(this.energy <= 0){
                 let sameKind = creatures.filter(c => c.config && c.config.id === this.config.id);
                 if(sameKind.length > 1) return false;
