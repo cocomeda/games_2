@@ -123,7 +123,7 @@ class Creature {
 
         let [turn, accel] = this.brain.predict(inputs);
         this.angle += turn * 0.15;
-        this.speed += (this.maxSpeed * (0.1 + Math.abs(accel) * 0.9) - this.speed) * 0.1;
+        this.speed += (this.maxSpeed * (0.05 + Math.abs(accel) * 0.95) - this.speed) * 0.1;
 
         this.x += Math.cos(this.angle) * this.speed;
         this.y += Math.sin(this.angle) * this.speed;
