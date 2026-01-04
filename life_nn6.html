@@ -2,18 +2,19 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Evolution v4.0 - Stun Penalty System</title>
+<title>Evolution v4.1 - Ultimate Hunter & Stun System</title>
 <style>
     body { margin:0; background:#010101; overflow:hidden; color:white; font-family:'Consolas',monospace; }
     canvas{ display:block; }
-    .stats{ position:absolute; top:15px; left:15px; background: rgba(0,0,0,0.85); padding:15px; border-radius:8px; border:1px solid #444; min-width:320px; pointer-events: none; z-index: 10;}
+    .stats{ position:absolute; top:15px; left:15px; background: rgba(0,0,0,0.85); padding:15px; border-radius:8px; border:1px solid #444; min-width:340px; pointer-events: none; z-index: 10;}
     .stats button, .stats input { pointer-events: auto; }
     .grid{ display:grid; grid-template-columns: 1fr; gap:8px; margin-top:10px;}
     .row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+    .btn-group { display: flex; gap: 4px; }
     .c-herb{ color:#ffffff; } .c-1{ color:#ff3333; } .c-2{ color:#3333ff; } .c-3{ color:#ffff33; }
     .val{ font-weight:bold; margin-left: 10px; }
     #log{ color:#ffcc00; font-size:11px; margin-top:10px; display:block; height: 1.2em;}
-    button{ padding:4px 10px; border:none; border-radius:4px; background:#444; color:white; cursor:pointer; font-size: 11px;}
+    button{ padding:4px 8px; border:none; border-radius:4px; background:#444; color:white; cursor:pointer; font-size: 11px;}
     button:hover{ background:#666; }
     hr { border:0; border-top:1px solid #333; margin: 8px 0; }
     input[type="file"] { display: none; }
@@ -21,24 +22,26 @@
 </head>
 <body>
 <div class="stats">
-    <b>EVOLUTION v4.0 (Stun & Penalty)</b>
+    <b>EVOLUTION v4.1 (Stun & Strategy)</b>
     <hr>
     <div class="row c-herb">
-        <span>HERB (不死/スタン有): <span id="hCount" class="val">0</span></span>
-        <button onclick="saveRandom('herb')">保存</button>
-        <button onclick="loadBrain('herb')">ロード</button>
+        <span>HERB (不死/草食): <span id="hCount" class="val">0</span></span>
+        <div class="btn-group">
+            <button onclick="saveRandom('herb')">保存</button>
+            <button onclick="loadBrain('herb')">ロード</button>
+        </div>
     </div>
     <hr>
     <div class="grid">
-        <div class="row c-1"><span>RED: <span id="cnt1" class="val">0</span></span><button onclick="saveRandom(1)">保存</button></div>
-        <div class="row c-2"><span>BLUE: <span id="cnt2" class="val">0</span></span><button onclick="saveRandom(2)">保存</button></div>
-        <div class="row c-3"><span>YEL: <span id="cnt3" class="val">0</span></span><button onclick="saveRandom(3)">保存</button></div>
+        <div class="row c-1"><span>RED (肉食): <span id="cnt1" class="val">0</span></span><div class="btn-group"><button onclick="saveRandom(1)">保存</button><button onclick="loadBrain(1)">ロード</button></div></div>
+        <div class="row c-2"><span>BLUE(肉食): <span id="cnt2" class="val">0</span></span><div class="btn-group"><button onclick="saveRandom(2)">保存</button><button onclick="loadBrain(2)">ロード</button></div></div>
+        <div class="row c-3"><span>YEL (肉食): <span id="cnt3" class="val">0</span></span><div class="btn-group"><button onclick="saveRandom(3)">保存</button><button onclick="loadBrain(3)">ロード</button></div></div>
     </div>
     <div class="row" style="color:#888; font-size:10px; margin-top:5px;">
         <span>MEAT (死骸): <span id="mCount" class="val">0</span></span>
     </div>
     <hr>
-    <span id="log">Collision Stun Logic: Online</span>
+    <span id="log">Neural Network Evolutionary System Online</span>
     <input type="file" id="fileInput" accept=".json" onchange="handleFileLoad()">
 </div>
 <canvas id="canvas"></canvas>
@@ -51,20 +54,20 @@ const TYPES = [{id:1, name:'Red', color:'#ff3333'},{id:2, name:'Blue', color:'#3
 let creatures = [];
 let meats = []; 
 let obstacles = []; 
-const MAX_TOTAL = 500;
+const MAX_TOTAL = 450;
 let loadTargetType = null;
 
 class Brain {
     constructor(weights=null) {
         this.inputSize = 22;
-        this.h1Size = 12; 
+        this.h1Size = 14; 
         this.h2Size = 8;
         if(weights){
             this.w1 = new Float32Array(weights.w1); 
             this.w2 = new Float32Array(weights.w2); 
             this.w3 = new Float32Array(weights.w3);
         } else {
-            const personality = Math.random() * 5.0; 
+            const personality = 3.0 + Math.random() * 3.0; 
             const rand = () => (Math.random() * 2 - 1) * personality;
             this.w1 = Float32Array.from({length:this.inputSize * this.h1Size}, rand);
             this.w2 = Float32Array.from({length:this.h1Size * this.h2Size}, rand);
@@ -98,9 +101,9 @@ class Creature {
         this.angle = Math.random() * Math.PI * 2;
         this.brain = (brain instanceof Brain) ? brain : new Brain(brain);
         this.speed = 0;
-        this.maxSpeed = (type==='herb') ? 3.5 : 8.5;
+        this.maxSpeed = (type==='herb') ? 3.8 : 8.8;
         this.flash = 0;
-        this.stunTimer = 0; // スタン状態管理
+        this.stunTimer = 0;
         this.collision = false;
     }
 
@@ -108,11 +111,10 @@ class Creature {
         if(this.flash > 0) this.flash--;
         this.collision = false;
 
-        // スタン中は思考と能動的な移動を停止
         if(this.stunTimer > 0) {
             this.stunTimer--;
-            this.speed *= 0.8; // 摩擦で止まる
-            this.energy -= 0.2; // スタン中も腹は減る
+            this.speed *= 0.8;
+            this.energy -= 0.25; // スタン中の空腹ペナルティ
         } else {
             let inputs = [];
             let nHerb = this.getNearest(creatures.filter(c => c.type==='herb' && c!==this));
@@ -135,31 +137,29 @@ class Creature {
             inputs.push(nObs ? nObs.dist/300 : 1, nObs ? nObs.angle/Math.PI : 0);
 
             let [turn, accel] = this.brain.predict(inputs);
-            this.angle += turn * 0.2; 
+            this.angle += turn * 0.22; 
             let targetSpeed = accel * this.maxSpeed;
-            this.speed += (targetSpeed - this.speed) * 0.15;
+            this.speed += (targetSpeed - this.speed) * 0.18;
         }
 
         let nx = this.x + Math.cos(this.angle) * this.speed;
         let ny = this.y + Math.sin(this.angle) * this.speed;
 
-        // 衝突判定
         for(let obs of obstacles) {
             if(nx > obs.x && nx < obs.x + obs.w && ny > obs.y && ny < obs.y + obs.h) {
                 const centerX = obs.x + obs.w/2;
                 const centerY = obs.y + obs.h/2;
                 const bounceAngle = Math.atan2(this.y - centerY, this.x - centerX);
                 
-                nx = this.x + Math.cos(bounceAngle) * 12;
-                ny = this.y + Math.sin(bounceAngle) * 12;
+                nx = this.x + Math.cos(bounceAngle) * 15;
+                ny = this.y + Math.sin(bounceAngle) * 15;
                 
-                this.angle = bounceAngle + (Math.random() - 0.5) * 0.2;
-                this.speed *= -0.3;
+                this.angle = bounceAngle + (Math.random() - 0.5) * 0.3;
+                this.speed *= -0.4;
 
-                // スタンペナルティの付与
-                this.stunTimer = 60; // 約1秒間（60FPS想定）
-                if(this.type !== 'herb') this.energy -= 1.0; // 自殺を防ぐためダメージは低めに設定
-                this.flash = 60;
+                this.stunTimer = 70; // 約1.1秒のスタン
+                if(this.type !== 'herb') this.energy -= 1.5; 
+                this.flash = 70;
                 this.collision = true;
                 break;
             }
@@ -171,10 +171,10 @@ class Creature {
         if(this.y<0) this.y=canvas.height; else if(this.y>canvas.height) this.y=0;
 
         if(this.type === 'herb') {
-            this.energy = 100;
+            this.energy = 100; // 草食は常に元気（捕食以外で死なない）
             this.checkEatMeat();
         } else {
-            this.energy -= (0.15 + Math.abs(this.speed) * 0.2);
+            this.energy -= (0.18 + Math.abs(this.speed) * 0.25);
             this.checkHunt();
             if(this.energy <= 0) {
                 let sameKind = creatures.filter(c => c.config && this.config && c.config.id === this.config.id);
@@ -182,7 +182,7 @@ class Creature {
                     meats.push({x: this.x, y: this.y, color: this.config.color});
                     return false; 
                 } else {
-                    this.energy = 80; return true; 
+                    this.energy = 80; return true; // 最後の1匹は死なせない
                 }
             }
         }
@@ -221,11 +221,11 @@ class Creature {
     checkHunt() {
         for(let i=creatures.length-1; i>=0; i--){
             let t = creatures[i];
-            if(t.type === 'herb' && Math.hypot(t.x-this.x, t.y-this.y) < 15){
-                this.energy += 180; creatures.splice(i, 1);
+            if(t.type === 'herb' && Math.hypot(t.x-this.x, t.y-this.y) < 16){
+                this.energy += 200; creatures.splice(i, 1);
                 if(creatures.length < MAX_TOTAL){
                     let cb = new Brain({w1: Array.from(this.brain.w1), w2: Array.from(this.brain.w2), w3: Array.from(this.brain.w3)});
-                    cb.mutate(0.1); creatures.push(new Creature(this.x, this.y, 'carn', this.config, cb));
+                    cb.mutate(0.12); creatures.push(new Creature(this.x, this.y, 'carn', this.config, cb));
                 }
                 break;
             }
@@ -246,10 +246,9 @@ class Creature {
     draw() {
         ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
         
-        // スタン中は暗く、点滅させる
         if(this.stunTimer > 0) {
-            ctx.globalAlpha = (this.stunTimer % 10 > 5) ? 0.3 : 0.8;
-            ctx.fillStyle = "#555";
+            ctx.globalAlpha = (this.stunTimer % 12 > 6) ? 0.2 : 0.7;
+            ctx.fillStyle = "#444";
         } else {
             ctx.fillStyle = (this.type==='herb' ? "#fff" : this.config.color);
             if(this.flash > 0) { ctx.shadowBlur = 10; ctx.shadowColor = "#fff"; }
@@ -257,20 +256,20 @@ class Creature {
 
         ctx.beginPath();
         if(this.type==='herb') ctx.arc(0,0,3.5,0,Math.PI*2); 
-        else { ctx.moveTo(12,0); ctx.lineTo(-7,-7); ctx.lineTo(-7,7); ctx.closePath(); }
+        else { ctx.moveTo(13,0); ctx.lineTo(-8,-8); ctx.lineTo(-8,8); ctx.closePath(); }
         ctx.fill(); ctx.restore(); ctx.globalAlpha = 1.0;
     }
 }
 
 function createObstacles() {
     obstacles = [];
-    const count = 6;
+    const count = 7;
     for(let i=0; i<count; i++) {
         obstacles.push({
-            x: 100 + Math.random() * (canvas.width - 250),
-            y: 80 + Math.random() * (canvas.height - 200),
-            w: 80 + Math.random() * 150,
-            h: 80 + Math.random() * 150
+            x: 100 + Math.random() * (canvas.width - 300),
+            y: 80 + Math.random() * (canvas.height - 250),
+            w: 80 + Math.random() * 160,
+            h: 80 + Math.random() * 160
         });
     }
 }
@@ -278,19 +277,20 @@ function createObstacles() {
 function init(){
     canvas.width = window.innerWidth; canvas.height = window.innerHeight;
     creatures = []; meats = []; createObstacles();
-    for(let i=0; i<80; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb'));
+    for(let i=0; i<75; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb'));
     TYPES.forEach(t => { for(let i=0; i<4; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'carn', t)); });
 }
 
 function animate(){
-    ctx.fillStyle = 'rgba(1, 1, 1, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(2, 2, 5, 0.45)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    ctx.fillStyle = "rgba(40, 40, 50, 0.9)";
-    ctx.strokeStyle = "#666";
+    ctx.fillStyle = "rgba(45, 45, 55, 0.95)";
+    ctx.strokeStyle = "#777";
+    ctx.lineWidth = 2;
     obstacles.forEach(obs => { ctx.fillRect(obs.x, obs.y, obs.w, obs.h); ctx.strokeRect(obs.x, obs.y, obs.w, obs.h); });
 
     meats.forEach(m => { 
-        ctx.fillStyle = m.color + "bb"; ctx.beginPath(); ctx.arc(m.x, m.y, 4, 0, Math.PI*2); ctx.fill(); 
+        ctx.fillStyle = m.color + "aa"; ctx.beginPath(); ctx.arc(m.x, m.y, 4, 0, Math.PI*2); ctx.fill(); 
     });
 
     let counts = { herb:0, 1:0, 2:0, 3:0 };
@@ -322,15 +322,19 @@ function animate(){
 
 function saveRandom(typeId) {
     let list = (typeId === 'herb') ? creatures.filter(c => c.type === 'herb') : creatures.filter(c => c.config && c.config.id === typeId);
-    if(list.length === 0) return;
+    if(list.length === 0) { updateLog("No units to save."); return; }
     const target = list[Math.floor(Math.random() * list.length)];
-    target.flash = 30;
+    target.flash = 60;
     const data = { w1: Array.from(target.brain.w1), w2: Array.from(target.brain.w2), w3: Array.from(target.brain.w3) };
     const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `brain_stun_${typeId}.json`; a.click();
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); 
+    const name = (typeId === 'herb') ? 'herb' : `carn_${typeId}`;
+    a.download = `brain_${name}.json`; a.click();
+    updateLog(`Saved ${name} brain.`);
 }
 
 function loadBrain(typeId) { loadTargetType = typeId; document.getElementById('fileInput').click(); }
+
 function handleFileLoad() {
     const file = document.getElementById('fileInput').files[0];
     if (!file) return;
@@ -338,16 +342,23 @@ function handleFileLoad() {
     reader.onload = function(e) {
         try {
             const weights = JSON.parse(e.target.result);
+            const type = (loadTargetType === 'herb') ? 'herb' : 'carn';
+            const config = (loadTargetType === 'herb') ? null : TYPES.find(t => t.id === loadTargetType);
+            
+            // 既存の同タイプを入れ替え
             creatures = creatures.filter(c => (loadTargetType === 'herb') ? c.type !== 'herb' : !(c.config && c.config.id === loadTargetType));
-            for (let i = 0; i < 4; i++) {
-                const type = (loadTargetType === 'herb') ? 'herb' : 'carn';
-                const config = (loadTargetType === 'herb') ? null : TYPES.find(t => t.id === loadTargetType);
+            
+            for (let i = 0; i < 6; i++) {
                 creatures.push(new Creature(Math.random() * canvas.width, Math.random() * canvas.height, type, config, new Brain(weights)));
             }
-        } catch (err) { }
+            updateLog(`Loaded brain into ${loadTargetType}.`);
+        } catch (err) { updateLog("Load Error: Invalid JSON"); }
+        document.getElementById('fileInput').value = ""; // リセット
     };
     reader.readAsText(file);
 }
+
+function updateLog(msg) { document.getElementById('log').innerText = msg; }
 
 window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; init(); });
 init(); animate();
