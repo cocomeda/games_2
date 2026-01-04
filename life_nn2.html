@@ -292,9 +292,9 @@ function animate(){
     }
 
     // --- 緊急復活（死骸を種に再生） ---
-    if(counts.herb <= 10 && herbList.length > 0 && meats.length > 0) {
+    if(counts.herb <= 15 && herbList.length > 0 && meats.length > 0) {
         recoveryTimer++;
-        if(recoveryTimer > 100) { 
+        if(recoveryTimer > 10) { 
             const elite = herbList[Math.floor(Math.random() * herbList.length)];
             meats.forEach(m => {
                 let cb = new Brain({w1: Array.from(elite.brain.w1), w2: Array.from(elite.brain.w2), w3: Array.from(elite.brain.w3)});
