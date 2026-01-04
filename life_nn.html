@@ -269,17 +269,36 @@ function loadBrain(event, typeId) {
     reader.onload = (e) => {
         try {
             const weights = JSON.parse(e.target.result);
+            
+            // 1. 同種の既存個体をすべて削除
+            creatures = creatures.filter(c => {
+                if (typeId === 'herb') {
+                    return c.type !== 'herb';
+                } else {
+                    return !(c.type === 'carn' && c.config.id === typeId);
+                }
+            });
+
+            // 2. 読み込んだ脳を持つ個体を3体追加
             if(typeId === 'herb') {
-                for(let i=0; i<10; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb', null, new Brain(weights)));
+                for(let i=0; i<3; i++) {
+                    creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb', null, new Brain(weights)));
+                }
             } else {
                 const config = TYPES.find(t => t.id === typeId);
-                for(let i=0; i<5; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'carn', config, new Brain(weights)));
+                for(let i=0; i<3; i++) {
+                    creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'carn', config, new Brain(weights)));
+                }
             }
-            updateLog(`脳を読み込みました！`);
-        } catch(err) { alert("無効なファイルです"); }
+            
+            updateLog(`${typeId === 'herb' ? '草食' : '肉食タイプ '+typeId} を置換しました (3体)`);
+        } catch(err) { 
+            console.error(err);
+            alert("無効なファイルです"); 
+        }
     };
     reader.readAsText(file);
-    event.target.value = ""; // リセット
+    event.target.value = ""; // 連続で同じファイルを読み込めるようにリセット
 }
 
 function updateLog(msg) {
