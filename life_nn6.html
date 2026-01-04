@@ -277,7 +277,7 @@ function createObstacles() {
 function init(){
     canvas.width = window.innerWidth; canvas.height = window.innerHeight;
     creatures = []; meats = []; createObstacles();
-    for(let i=0; i<75; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb'));
+    for(let i=0; i<120; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb'));
     TYPES.forEach(t => { for(let i=0; i<4; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'carn', t)); });
 }
 
