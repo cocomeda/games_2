@@ -264,7 +264,7 @@ function init(){
     canvas.width = window.innerWidth; canvas.height = window.innerHeight;
     creatures = []; meats = []; recoveryTimer = 0;
     // 初期個体
-    for(let i=0; i<90; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb'));
+    for(let i=0; i<70; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb'));
     TYPES.forEach(t => { for(let i=0; i<4; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'carn', t)); });
 }
 
