@@ -2,28 +2,28 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Evolution v2.5 - Survival Selection</title>
+<title>Evolution v2.7 - Full Simulation</title>
 <style>
 body { margin:0; background:#010101; overflow:hidden; color:white; font-family:'Consolas',monospace; }
 canvas{ display:block; }
-.stats{ position:absolute; top:15px; left:15px; background: rgba(0,0,0,0.85); padding:15px; border-radius:8px; border:1px solid #444; min-width:300px; pointer-events: none;}
+.stats{ position:absolute; top:15px; left:15px; background: rgba(0,0,0,0.85); padding:15px; border-radius:8px; border:1px solid #444; min-width:320px; pointer-events: none;}
 .stats button, .stats input { pointer-events: auto; }
 .grid{ display:grid; grid-template-columns: 1fr; gap:8px; margin-top:10px;}
 .row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
 .c-herb{ color:#ffffff; } .c-1{ color:#ff3333; } .c-2{ color:#3333ff; } .c-3{ color:#ffff33; }
 .val{ font-weight:bold; margin-left: 10px; }
 #log{ color:#00ffcc; font-size:11px; margin-top:10px; display:block; height: 1.2em;}
-button{ padding:3px 8px; border:none; border-radius:4px; background:#444; color:white; cursor:pointer; font-size: 11px;}
+button{ padding:4px 10px; border:none; border-radius:4px; background:#444; color:white; cursor:pointer; font-size: 11px;}
 button:hover{ background:#666; }
 hr { border:0; border-top:1px solid #333; margin: 8px 0; }
 </style>
 </head>
 <body>
 <div class="stats">
-    <b>EVOLUTION v2.5 (Survival Focus)</b>
+    <b>EVOLUTION v2.7 (NN Save/Load)</b>
     <hr>
     <div class="row c-herb">
-        <span>HERB: <span id="hCount" class="val">0</span></span>
+        <span>HERB (餌): <span id="hCount" class="val">0</span></span>
         <div>
             <button onclick="saveRandom('herb')">保存</button>
             <button onclick="document.getElementById('loadH').click()">読込</button>
@@ -33,7 +33,7 @@ hr { border:0; border-top:1px solid #333; margin: 8px 0; }
     <hr>
     <div class="grid">
         <div class="row c-1">
-            <span>RED: <span id="cnt1" class="val">0</span></span>
+            <span>RED (肉食): <span id="cnt1" class="val">0</span></span>
             <div>
                 <button onclick="saveRandom(1)">保存</button>
                 <button onclick="document.getElementById('load1').click()">読込</button>
@@ -41,7 +41,7 @@ hr { border:0; border-top:1px solid #333; margin: 8px 0; }
             </div>
         </div>
         <div class="row c-2">
-            <span>BLUE: <span id="cnt2" class="val">0</span></span>
+            <span>BLUE (肉食): <span id="cnt2" class="val">0</span></span>
             <div>
                 <button onclick="saveRandom(2)">保存</button>
                 <button onclick="document.getElementById('load2').click()">読込</button>
@@ -49,7 +49,7 @@ hr { border:0; border-top:1px solid #333; margin: 8px 0; }
             </div>
         </div>
         <div class="row c-3">
-            <span>YEL: <span id="cnt3" class="val">0</span></span>
+            <span>YEL (肉食): <span id="cnt3" class="val">0</span></span>
             <div>
                 <button onclick="saveRandom(3)">保存</button>
                 <button onclick="document.getElementById('load3').click()">読込</button>
@@ -58,8 +58,8 @@ hr { border:0; border-top:1px solid #333; margin: 8px 0; }
         </div>
     </div>
     <hr>
-    <button id="addHerbBtn" style="width:100%">+10 Herbs</button>
-    <span id="log">Sensors Initializing...</span>
+    <button id="addHerbBtn" style="width:100%; background:#225522;">+10 草食動物を追加</button>
+    <span id="log">System Ready...</span>
 </div>
 <canvas id="canvas"></canvas>
 
@@ -78,7 +78,7 @@ const MAX_TOTAL = 400;
 
 class Brain {
     constructor(weights=null) {
-        const inputSize = 15;
+        const inputSize = 15; // 視覚入力
         if(weights){
             this.w1 = new Float32Array(weights.w1);
             this.w2 = new Float32Array(weights.w2);
@@ -120,15 +120,18 @@ class Creature {
         this.speed = 0;
         this.maxSpeed = (type==='herb') ? 3.0 : 3.4;
         this.prevX = x; this.prevY = y;
-        this.flash = 0; // 保存時に光らせるためのタイマー
+        this.flash = 0;
     }
 
     update() {
         if(this.flash > 0) this.flash--;
         let inputs = [];
+        
+        // 1. 最寄りの草食動物
         let nHerb = this.getNearest(creatures.filter(c => c.type==='herb' && c!==this));
         inputs.push(nHerb ? nHerb.dist/600 : 1, nHerb ? nHerb.angle/Math.PI : 0);
 
+        // 2. 最寄りの各色の肉食動物
         TYPES.forEach(t => {
             let n = this.getNearest(creatures.filter(c => c.config && c.config.id === t.id && c!==this));
             if(n){
@@ -137,8 +140,11 @@ class Creature {
                 inputs.push(1, 0, 0, 0);
             }
         });
+        
+        // 3. 自分のエネルギー
         inputs.push(this.energy/400);
 
+        // 脳の推論と移動
         let [turn, accel] = this.brain.predict(inputs);
         this.angle += turn * 0.15;
         let targetSpeed = this.maxSpeed * (0.6 + Math.abs(accel) * 0.4);
@@ -148,15 +154,17 @@ class Creature {
         this.x += Math.cos(this.angle) * this.speed;
         this.y += Math.sin(this.angle) * this.speed;
 
+        // トーラスワープ
         if(this.x<0) this.x=canvas.width; else if(this.x>canvas.width) this.x=0;
         if(this.y<0) this.y=canvas.height; else if(this.y>canvas.height) this.y=0;
 
+        // 肉食動物の生命維持コストと狩り
         if(this.type === 'carn'){
             this.energy -= (0.16 + this.speed * 0.1);
             if(this.energy <= 0){
                 let sameKind = creatures.filter(c => c.config && c.config.id === this.config.id);
                 if(sameKind.length > 1) return false;
-                this.energy = 40; 
+                this.energy = 40; // 最後の一体は死なない救済措置
             }
             this.checkHunt();
         }
@@ -166,9 +174,15 @@ class Creature {
     getNearest(list) {
         let nearest = null, minDist = 600;
         for(let item of list){
-            let d = Math.hypot(this.x - item.x, this.y - item.y);
+            let dx = item.x - this.x;
+            let dy = item.y - this.y;
+            // トーラス空間補正
+            if (Math.abs(dx) > canvas.width / 2) dx -= Math.sign(dx) * canvas.width;
+            if (Math.abs(dy) > canvas.height / 2) dy -= Math.sign(dy) * canvas.height;
+
+            let d = Math.hypot(dx, dy);
             if(d < minDist){ 
-                let ang = Math.atan2(item.y-this.y, item.x-this.x) - this.angle;
+                let ang = Math.atan2(dy, dx) - this.angle;
                 while(ang > Math.PI) ang -= Math.PI*2;
                 while(ang < -Math.PI) ang += Math.PI*2;
                 minDist = d; nearest = {target: item, dist: d, angle: ang}; 
@@ -180,15 +194,23 @@ class Creature {
     checkHunt() {
         for(let i=creatures.length-1; i>=0; i--){
             let target = creatures[i];
-            if(target.type === 'herb' && Math.hypot(this.x - target.x, this.y - target.y) < 16){
-                this.energy += 160;
-                creatures.splice(i, 1);
-                if(creatures.length < MAX_TOTAL){
-                    let childBrain = new Brain({w1: Array.from(this.brain.w1), w2: Array.from(this.brain.w2), w3: Array.from(this.brain.w3)});
-                    childBrain.mutate(0.1); 
-                    creatures.push(new Creature(this.x, this.y, 'carn', this.config, childBrain));
+            if(target.type === 'herb'){
+                let dx = target.x - this.x;
+                let dy = target.y - this.y;
+                if (Math.abs(dx) > canvas.width / 2) dx -= Math.sign(dx) * canvas.width;
+                if (Math.abs(dy) > canvas.height / 2) dy -= Math.sign(dy) * canvas.height;
+
+                if(Math.hypot(dx, dy) < 16){
+                    this.energy += 160;
+                    creatures.splice(i, 1);
+                    // 捕食成功時に増殖
+                    if(creatures.length < MAX_TOTAL){
+                        let childBrain = new Brain({w1: Array.from(this.brain.w1), w2: Array.from(this.brain.w2), w3: Array.from(this.brain.w3)});
+                        childBrain.mutate(0.1); 
+                        creatures.push(new Creature(this.x, this.y, 'carn', this.config, childBrain));
+                    }
+                    break;
                 }
-                break;
             }
         }
     }
@@ -200,9 +222,7 @@ class Creature {
         ctx.rotate(this.angle);
         
         if(this.flash > 0) {
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = "#fff";
-            ctx.scale(2, 2);
+            ctx.shadowBlur = 20; ctx.shadowColor = "#fff"; ctx.scale(2, 2);
         }
 
         ctx.fillStyle = color;
@@ -218,17 +238,16 @@ class Creature {
     }
 }
 
-// ----------------- Save / Load -----------------
+// ----------------- Save / Load Functions -----------------
 function saveRandom(typeId) {
     let list = (typeId === 'herb') 
         ? creatures.filter(c => c.type === 'herb')
         : creatures.filter(c => c.config && c.config.id === typeId);
     
-    if(list.length === 0) return alert("個体がいません");
+    if(list.length === 0) return alert("対象がいません");
     
-    // 生き残っている中からランダムに1体選ぶ
     const target = list[Math.floor(Math.random() * list.length)];
-    target.flash = 30; // 0.5秒ほど光らせる
+    target.flash = 40;
     
     const data = {
         w1: Array.from(target.brain.w1),
@@ -240,7 +259,7 @@ function saveRandom(typeId) {
     a.href = URL.createObjectURL(blob);
     a.download = `brain_${typeId === 'herb' ? 'herb' : 'type_'+typeId}.json`;
     a.click();
-    updateLog(`Saved a Survivor!`);
+    updateLog(`保存しました: ${typeId === 'herb' ? '草食' : '肉食タイプ '+typeId}`);
 }
 
 function loadBrain(event, typeId) {
@@ -248,16 +267,19 @@ function loadBrain(event, typeId) {
     if(!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-        const weights = JSON.parse(e.target.result);
-        if(typeId === 'herb') {
-            for(let i=0; i<10; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb', null, new Brain(weights)));
-        } else {
-            const config = TYPES.find(t => t.id === typeId);
-            for(let i=0; i<3; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'carn', config, new Brain(weights)));
-        }
-        updateLog(`Brain Injected!`);
+        try {
+            const weights = JSON.parse(e.target.result);
+            if(typeId === 'herb') {
+                for(let i=0; i<10; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb', null, new Brain(weights)));
+            } else {
+                const config = TYPES.find(t => t.id === typeId);
+                for(let i=0; i<5; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'carn', config, new Brain(weights)));
+            }
+            updateLog(`脳を読み込みました！`);
+        } catch(err) { alert("無効なファイルです"); }
     };
     reader.readAsText(file);
+    event.target.value = ""; // リセット
 }
 
 function updateLog(msg) {
@@ -270,6 +292,7 @@ function updateLog(msg) {
 function init(){
     canvas.width = window.innerWidth; canvas.height = window.innerHeight;
     creatures = [];
+    // 初期個体
     for(let i=0; i<70; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb'));
     TYPES.forEach(t => {
         for(let i=0; i<3; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'carn', t));
@@ -290,9 +313,10 @@ function animate(){
         }
     }
 
+    // 草食動物の自動補充
     if(counts.herb === 0) {
         for(let i=0; i<50; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb'));
-        updateLog("NEW HERBS SPAWNED");
+        updateLog("草食動物がリスポーンしました");
     }
 
     document.getElementById('hCount').innerText = counts.herb;
@@ -306,6 +330,7 @@ function animate(){
 window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
 document.getElementById('addHerbBtn').addEventListener('click',()=> {
     for(let i=0; i<10; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'herb'));
+    updateLog("+10 Herbs added");
 });
 
 init();
