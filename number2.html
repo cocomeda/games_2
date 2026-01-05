@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>1 to N 空間分析 Pro - フル機能版</title>
+<title>1 to N 数字タップゲーム </title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -14,6 +14,7 @@
     --accent: #007bff;
     --danger: #dc3545;
     --success: #28a745;
+    --secondary: #6c757d;
     --text: #333;
 }
 
@@ -31,7 +32,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .tab { padding: 10px 15px; cursor: pointer; border-bottom: 3px solid transparent; font-weight: bold; color: #666; }
 .tab.active { border-color: var(--accent); color: var(--accent); }
 
-/* 一括選択エリア */
+/* 一括操作エリア */
 .selection-controls { display: flex; align-items: center; padding: 0 10px 10px; font-size: 0.9em; color: #666; }
 .selection-controls input { margin-right: 8px; transform: scale(1.2); }
 
@@ -45,6 +46,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .heat-cell { aspect-ratio: 1/1; font-size: 0.6em; display: flex; align-items: center; justify-content: center; font-weight: bold; }
 
 .control-btn { padding: 14px; width: 100%; border: none; border-radius: 12px; background: var(--accent); color: white; font-weight: bold; cursor: pointer; margin-bottom: 10px; font-size: 1em; }
+.sub-btn { padding: 10px; border-radius: 8px; border: 1px solid #ccc; background: white; font-size: 0.85em; cursor: pointer; flex: 1; margin: 0 5px; }
+
 #result-screen { display: none; }
 </style>
 </head>
@@ -52,7 +55,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="container">
     <div id="setup-area">
-        <h1>1 to N 分析 Pro</h1>
+        <h1>1 to N 数字タップゲーム</h1>
         <div style="margin-bottom: 20px;">
             <label>マス数選択：</label>
             <select id="gridSizeSelect" style="padding:10px; border-radius:8px;" onchange="saveConfig()">
@@ -97,7 +100,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
         </div>
 
         <div id="historyList" style="max-height:300px; overflow-y:auto; margin-bottom:15px;"></div>
-        <button id="multiAnalyzeBtn" class="control-btn" style="background:var(--success); display:none;" onclick="analyzeSelected()">選択したデータを統合分析</button>
+        
+        <div id="actionButtons" style="display:none;">
+            <button class="control-btn" style="background:var(--success); margin-bottom: 5px;" onclick="analyzeSelected()">選択したデータを統合分析</button>
+            <div style="display:flex; justify-content:space-between; margin-bottom: 20px;">
+                <button class="sub-btn" onclick="exportData('json')">JSON保存</button>
+                <button class="sub-btn" onclick="exportData('csv')">CSV書出</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -180,7 +190,6 @@ function changeTab(size) {
     document.querySelectorAll('.tab').forEach(t => {
         t.classList.toggle('active', parseInt(t.innerText) === size);
     });
-    // タブ切り替え時に全選択チェックを外す
     document.getElementById('selectAllHistory').checked = false;
     displayHistory();
 }
@@ -194,11 +203,11 @@ function displayHistory() {
     const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
     const filtered = history.filter(h => h.size === currentTabSize);
     const list = document.getElementById('historyList');
-    const btn = document.getElementById('multiAnalyzeBtn');
+    const actionArea = document.getElementById('actionButtons');
     const batchControl = document.getElementById('batchControl');
 
     const hasData = filtered.length > 0;
-    btn.style.display = hasData ? "block" : "none";
+    actionArea.style.display = hasData ? "block" : "none";
     batchControl.style.display = hasData ? "flex" : "none";
 
     list.innerHTML = filtered.map((item) => `
@@ -218,6 +227,42 @@ function deleteData(id) {
     history = history.filter(h => h.id !== id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
     displayHistory();
+}
+
+function exportData(type) {
+    const checked = document.querySelectorAll('.history-chk:checked');
+    if (checked.length === 0) return alert("保存するデータを選択してください");
+    
+    const history = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const selectedIds = Array.from(checked).map(c => parseInt(c.dataset.id));
+    const selectedData = history.filter(h => selectedIds.includes(h.id));
+
+    let content = "";
+    let mimeType = "";
+    let fileName = `1toN_data_${new Date().getTime()}`;
+
+    if (type === 'json') {
+        content = JSON.stringify(selectedData, null, 2);
+        mimeType = "application/json";
+        fileName += ".json";
+    } else {
+        // CSV作成：ヘッダー（日付, 合計, 1, 2, 3...）
+        const header = ["Date", "TotalTime", ...Array.from({length: currentTabSize}, (_, i) => i + 1)];
+        const rows = selectedData.map(d => [
+            d.date, d.time, ...d.logs.map(l => l.time)
+        ]);
+        content = [header, ...rows].map(r => r.join(",")).join("\n");
+        mimeType = "text/csv";
+        fileName += ".csv";
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 function viewSingleData(id) {
@@ -260,7 +305,6 @@ function showResult(allLogs, size, title) {
     const datasets = [];
     const labels = Array.from({length: size}, (_, i) => i + 1);
 
-    // 全データのゴーストライン
     allLogs.forEach((logs, idx) => {
         datasets.push({
             label: `試行 ${idx + 1}`,
@@ -273,7 +317,6 @@ function showResult(allLogs, size, title) {
         });
     });
 
-    // 平均とSDの計算
     const means = [];
     const sdUpper = [];
     const sdLower = [];
