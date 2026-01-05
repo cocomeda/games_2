@@ -277,7 +277,7 @@ function analyzeSelected() {
     const history = JSON.parse(localStorage.getItem(STORAGE_KEY));
     const selectedIds = Array.from(checked).map(c => parseInt(c.dataset.id));
     const selectedLogs = history.filter(h => selectedIds.includes(h.id)).map(h => h.logs);
-    showResult(selectedLogs, currentTabSize, checked.length + "件の統合分析");
+    showResult(selectedLogs, currentTabSize, checked.length + "件の統合分析(タップ1は除外)");
 }
 
 function showResult(allLogs, size, title) {
@@ -288,17 +288,25 @@ function showResult(allLogs, size, title) {
     document.getElementById('resultTitle').innerText = title;
 
     const posStats = new Array(size).fill(0).map(() => []);
-    allLogs.forEach(logs => logs.forEach(log => posStats[log.pos].push(log.time)));
-    const posAverages = posStats.map(times => times.length ? times.reduce((a,b)=>a+b,0) / times.length : 0);
+
+    allLogs.forEach(logs => {
+        logs.forEach(log => {
+            if (log.num !== 1) { 
+                posStats[log.pos].push(log.time); // 閉じカッコを修正
+            }
+        }); // 閉じタグを修正
+    });
+
+    const posAverages = posStats.map(times => times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0);
     
     const maxPosTime = Math.max(...posAverages);
-    const minPosTime = Math.min(...posAverages.filter(a => a > 0));
+    const minPosTime = Math.min(...posAverages.filter(a => a > 0) || [0]); // 0除算回避
     const heatmap = document.getElementById('heatmapGrid');
     const gridSize = Math.sqrt(size);
     heatmap.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
     heatmap.innerHTML = posAverages.map(avg => {
         const ratio = maxPosTime === minPosTime ? 0 : (avg - minPosTime) / (maxPosTime - minPosTime);
-        const color = avg === 0 ? "#fff" : `rgb(255, ${255*(1-ratio)}, ${255*(1-ratio)})`;
+        const color = avg === 0 ? "#fff" : `rgb(255, ${255 * (1 - ratio)}, ${255 * (1 - ratio)})`;
         return `<div class="heat-cell" style="background:${color}">${avg ? avg.toFixed(2) : '-'}</div>`;
     }).join('');
 
@@ -322,8 +330,8 @@ function showResult(allLogs, size, title) {
     const sdLower = [];
     for (let i = 0; i < size; i++) {
         const vals = allLogs.map(logs => logs[i]?.time).filter(v => v !== undefined);
-        const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-        const variance = vals.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / vals.length;
+        const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+        const variance = vals.length ? vals.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / vals.length : 0;
         const sd = Math.sqrt(variance);
         means.push(avg);
         sdUpper.push(avg + sd);
@@ -334,8 +342,13 @@ function showResult(allLogs, size, title) {
     datasets.push({ label: '-1 SD', data: sdLower, fill: false, borderColor: 'transparent', pointRadius: 0, tension: 0.3 });
     datasets.push({ label: '平均秒数', data: means, borderColor: '#007bff', borderWidth: 3, pointRadius: 2, fill: false, tension: 0.3 });
 
-    if (speedChart) speedChart.destroy();
-    speedChart = new Chart(document.getElementById('speedChart'), {
+    // speedChartがグローバルまたは外部で定義されていない場合の対策
+    if (typeof speedChart !== 'undefined' && speedChart) {
+        speedChart.destroy();
+    }
+
+    // Chart.jsのインスタンス作成（speedChart変数に代入）
+    window.speedChart = new Chart(document.getElementById('speedChart'), {
         type: 'line',
         data: { labels, datasets },
         options: {
