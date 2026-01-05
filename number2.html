@@ -280,9 +280,6 @@ function analyzeSelected() {
     showResult(selectedLogs, currentTabSize, checked.length + "件の統合分析");
 }
 
-
-
-// 修正した showResult 関数のみ記載します
 function showResult(allLogs, size, title) {
     document.getElementById('game-area').style.display = 'none';
     document.getElementById('setup-area').style.display = 'none';
@@ -291,17 +288,7 @@ function showResult(allLogs, size, title) {
     document.getElementById('resultTitle').innerText = title;
 
     const posStats = new Array(size).fill(0).map(() => []);
-    
-    // --- 修正箇所：ヒートマップ用の統計から「数字の1」を除外 ---
-    allLogs.forEach(logs => {
-        logs.forEach(log => {
-            if (log.num !== 1) { // 1以外の数字のみをヒートマップの統計に含める
-                posStats[log.pos].push(log.time);
-            }
-        });
-    });
-    // -------------------------------------------------------
-
+    allLogs.forEach(logs => logs.forEach(log => posStats[log.pos].push(log.time)));
     const posAverages = posStats.map(times => times.length ? times.reduce((a,b)=>a+b,0) / times.length : 0);
     
     const maxPosTime = Math.max(...posAverages);
@@ -343,6 +330,10 @@ function showResult(allLogs, size, title) {
         sdLower.push(Math.max(0, avg - sd));
     }
 
+    datasets.push({ label: '+1 SD', data: sdUpper, fill: '+1', backgroundColor: 'rgba(0, 123, 255, 0.05)', borderColor: 'transparent', pointRadius: 0, tension: 0.3 });
+    datasets.push({ label: '-1 SD', data: sdLower, fill: false, borderColor: 'transparent', pointRadius: 0, tension: 0.3 });
+    datasets.push({ label: '平均秒数', data: means, borderColor: '#007bff', borderWidth: 3, pointRadius: 2, fill: false, tension: 0.3 });
+
     if (speedChart) speedChart.destroy();
     speedChart = new Chart(document.getElementById('speedChart'), {
         type: 'line',
@@ -363,13 +354,6 @@ function showResult(allLogs, size, title) {
         }
     });
 }
-
-
-
-
-
-
-
 
 window.onload = init;
 </script>
