@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hippocampus Trainer Pro</title>
+    <style>
+        :root {
+            --bg-color: #1e1e2f;
+            --card-bg: #2a2a40;
+            --accent-color: #7289da;
+            --text-color: #ffffff;
+            --success: #43b581;
+            --error: #f04747;
+            --active: #faa61a;
+            --lock-bg: rgba(0, 0, 0, 0.5);
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            text-align: center;
+            background: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        #game-container { max-width: 450px; margin: auto; position: relative; }
+
+        h1 { font-size: 18px; font-weight: 300; letter-spacing: 2px; margin-bottom: 15px; color: var(--accent-color); }
+
+        .setting-box {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .control-row { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; }
+        .btn-small { width: 40px; height: 40px; font-size: 20px; border: none; border-radius: 12px; background: #36393f; color: white; cursor: pointer; transition: 0.2s; }
+        .btn-small:active { background: var(--accent-color); transform: scale(0.9); }
+        .label-text { font-size: 13px; opacity: 0.7; letter-spacing: 1px; }
+        .value-text { font-size: 16px; font-weight: bold; width: 85px; }
+
+        /* グリッドとオーバーレイ */
+        #grid-wrapper { position: relative; width: 340px; height: 340px; margin: 25px auto; }
+        .grid { display: grid; gap: 10px; width: 100%; height: 100%; }
+        
+        #lock-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--lock-bg);
+            backdrop-filter: blur(4px);
+            border-radius: 15px;
+            display: none; /* 初期は非表示 */
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            font-size: 50px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .cell {
+            background: var(--card-bg);
+            border-radius: 10px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .cell.active { background: var(--active) !important; box-shadow: 0 0 25px var(--active); transform: scale(0.92); }
+        .cell.correct { background: var(--success); transform: scale(0.95); }
+        .cell.wrong { background: var(--error); transform: scale(0.95); }
+        .cell.all-success { background: var(--success); opacity: 0.6; }
+
+        /* Success表示 */
+        #success-screen {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0);
+            background: rgba(67, 181, 129, 0.95);
+            width: 220px; height: 220px;
+            border-radius: 50%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 100;
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 0 60px rgba(67, 181, 129, 0.6);
+            pointer-events: none;
+        }
+        #success-screen.show { transform: translate(-50%, -50%) scale(1); }
+        .check-mark { font-size: 90px; margin-bottom: -5px; }
+
+        #start-btn {
+            width: 100%; padding: 18px; font-size: 18px; border: none; border-radius: 15px;
+            background: linear-gradient(135deg, #7289da, #5b6eae); color: white; font-weight: bold;
+            cursor: pointer; box-shadow: 0 5px 20px rgba(114, 137, 218, 0.4);
+            letter-spacing: 3px;
+        }
+        #start-btn:active { transform: translateY(2px); filter: brightness(1.1); }
+
+        #status { font-size: 18px; margin: 15px 0; min-height: 1.5em; font-weight: 300; letter-spacing: 1px; }
+        .wait-timer { color: var(--active); font-weight: bold; font-size: 24px; margin-left: 10px; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>HIPPOCAMPUS TRAINER</h1>
+
+
+    <div class="setting-box">
+        <div class="control-row"><span class="label-text">GRID SIZE</span><div>
+            <button onclick="changeGrid(-1)" class="btn-small">ー</button>
+            <span id="grid-label" class="value-text">5 x 5</span>
+            <button onclick="changeGrid(1)" class="btn-small">＋</button>
+        </div></div>
+        <div class="control-row"><span class="label-text">STEPS</span><div>
+            <button onclick="changeLevel(-1)" class="btn-small">ー</button>
+            <span id="level-label" class="value-text">3 steps</span>
+            <button onclick="changeLevel(1)" class="btn-small">＋</button>
+        </div></div>
+        <div class="control-row"><span class="label-text">DELAY</span><div>
+            <button onclick="changeWait(-1)" class="btn-small">ー</button>
+            <span id="wait-label" class="value-text">3.0s</span>
+            <button onclick="changeWait(1)" class="btn-small">＋</button>
+        </div></div>
+    </div>
+
+    <div id="grid-wrapper">
+        <div id="lock-overlay">🔒</div>
+        <div id="grid" class="grid"></div>
+        <div id="success-screen">
+            <div class="check-mark">✓</div>
+            <div style="font-weight:bold; letter-spacing:2px; font-size: 18px;">SUCCESS</div>
+        </div>
+    </div>
+    
+    <button id="start-btn" onclick="startGame()">S T A R T</button>
+    
+    
+        <div id="status">Ready to Start</div>
+        
+        
+</div>
+
+<script>
+    const waitOptions = [0.5, 1, 3, 5, 10];
+    
+    // 保存された設定の読み込み
+    let gridSize = parseInt(localStorage.getItem('savedGridSize')) || 5;
+    let level = parseInt(localStorage.getItem('savedLevel')) || 3;
+    let waitIdx = parseInt(localStorage.getItem('savedWaitIdx')) || 2;
+    
+    let sequence = [], userSequence = [], isShowing = false;
+
+    const gridElement = document.getElementById('grid');
+    const lockOverlay = document.getElementById('lock-overlay');
+    const successScreen = document.getElementById('success-screen');
+    const statusElement = document.getElementById('status');
+
+    function initUI() {
+        gridElement.innerHTML = '';
+        gridElement.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+        document.getElementById('grid-label').textContent = `${gridSize} x ${gridSize}`;
+        document.getElementById('level-label').textContent = `${level} steps`;
+        document.getElementById('wait-label').textContent = `${waitOptions[waitIdx].toFixed(1)}s`;
+        
+        // 設定を保存（常に最新の状態を継承）
+        localStorage.setItem('savedGridSize', gridSize);
+        localStorage.setItem('savedLevel', level);
+        localStorage.setItem('savedWaitIdx', waitIdx);
+
+        for (let i = 0; i < gridSize * gridSize; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.onclick = () => handleCellClick(i);
+            gridElement.appendChild(cell);
+        }
+    }
+
+    function changeGrid(d) { if (!isShowing) { gridSize = Math.max(2, Math.min(7, gridSize + d)); initUI(); } }
+    function changeLevel(d) { if (!isShowing) { level = Math.max(1, Math.min(25, level + d)); initUI(); } }
+    function changeWait(d) { if (!isShowing) { waitIdx = Math.max(0, Math.min(waitOptions.length-1, waitIdx + d)); initUI(); } }
+
+    async function startGame() {
+        if (isShowing) return;
+        sequence = []; userSequence = []; isShowing = true;
+        successScreen.classList.remove('show');
+        statusElement.textContent = "Memorize...";
+        
+        // 手本表示中はロックマークを表示しない（内部的にはクリック不可）
+        lockOverlay.style.display = 'none';
+
+        for (let i = 0; i < level; i++) {
+            sequence.push(Math.floor(Math.random() * (gridSize * gridSize)));
+        }
+
+        // 手本表示
+        for (let index of sequence) {
+            await wait(500);
+            flashCell(index, 'active');
+            await wait(350);
+        }
+        
+        // 待機フェーズ：ここでロックを表示
+        let timeLeft = waitOptions[waitIdx];
+        lockOverlay.style.display = 'flex'; 
+        
+        while(timeLeft > 0.1) {
+            statusElement.innerHTML = `Hold on... <span class="wait-timer">${timeLeft.toFixed(1)}s</span>`;
+            await wait(100);
+            timeLeft -= 0.1;
+        }
+        
+        // 回答フェーズ：ロック解除
+        lockOverlay.style.display = 'none';
+        isShowing = false;
+        statusElement.textContent = "Go!";
+    }
+
+    function handleCellClick(index) {
+        if (isShowing || sequence.length === 0) return;
+        userSequence.push(index);
+        const expected = sequence[userSequence.length - 1];
+
+        if (index === expected) {
+            flashCell(index, 'correct');
+            if (userSequence.length === sequence.length) {
+                showSuccess();
+            }
+        } else {
+            flashCell(index, 'wrong');
+            statusElement.textContent = "Failed";
+            sequence = [];
+        }
+    }
+
+    function showSuccess() {
+        statusElement.textContent = "Excellent!";
+        successScreen.classList.add('show');
+        const cells = document.querySelectorAll('.cell');
+        cells.forEach(c => c.classList.add('all-success'));
+        sequence = [];
+        setTimeout(() => {
+            successScreen.classList.remove('show');
+            cells.forEach(c => c.classList.remove('all-success'));
+            statusElement.textContent = "Ready";
+        }, 2000);
+    }
+
+    function flashCell(index, className) {
+        const cells = document.querySelectorAll('.cell');
+        if(!cells[index]) return;
+        cells[index].classList.add(className);
+        setTimeout(() => cells[index].classList.remove(className), 300);
+    }
+
+    function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    initUI();
+</script>
+</body>
+</html>
