@@ -165,7 +165,7 @@ class Creature {
         if(this.type === 'herb') {
             this.checkEatMeat();
         } else {
-            this.energy -= (0.03 + this.speed * 0.12);
+            this.energy -= (0.03 + this.speed * 0.1);
             if(this.energy <= 0) {
                 let sameKind = creatures.filter(c => c.config && this.config && c.config.id === this.config.id);
                 if(sameKind.length > 1) {
