@@ -133,7 +133,7 @@ class Monster {
 
         // ---- エネルギー消費モデル（基礎代謝＋速度依存）----
         const basal = 0.05;                  // 基礎代謝
-        const moveCost = 0.02 * speed * speed; // 速度の2乗コスト
+        const moveCost = 0.03 * speed * speed; // 速度の2乗コスト
         const turnCost = 0.02 * Math.abs(turn); // 旋回コスト
 
         if (monsters.length > 1) {
