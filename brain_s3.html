@@ -104,7 +104,7 @@ class Creature {
         this.angle = Math.random() * Math.PI * 2;
         this.brain = (brain instanceof Brain) ? brain : new Brain(brain);
         this.speed = 0;
-        this.maxSpeed = (type==='herb') ? 3.0 : 3.4;
+        this.maxSpeed = (type==='herb') ? 3.0 : 2.0;
         this.flash = 0;
     }
 
