@@ -236,7 +236,7 @@ function loop() {
     const spawnRate = parseInt(rateSlider.value) / 100;
     rateLabel.innerText = rateSlider.value;
 
-    if (frameCount % 300 === 0 && obstacles.length < 10) obstacles.push(new Obstacle(Math.random()*(canvas.width-150)+75, Math.random()*(canvas.height-250)+100));
+    if (frameCount % 300 === 0 && obstacles.length < 20) obstacles.push(new Obstacle(Math.random()*(canvas.width-150)+75, Math.random()*(canvas.height-250)+100));
     if (monsters.length <= 30 && foods.length < 20) for(let i=0; i<5; i++) foods.push(new Food(Math.random() > 0.5 ? 'A' : 'B'));
     if (Math.random() < spawnRate) bullets.push(new Bullet());
     if (Math.random() < 0.05) foods.push(new Food('A'));
