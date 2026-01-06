@@ -104,7 +104,7 @@ class Creature {
         this.angle = Math.random() * Math.PI * 2;
         this.brain = (brain instanceof Brain) ? brain : new Brain(brain);
         this.speed = 0;
-        this.maxSpeed = (type==='herb') ? 3.0 : 2.0;
+        this.maxSpeed = (type==='herb') ? 4.0 : 2.0;
         this.flash = 0;
     }
 
@@ -128,7 +128,7 @@ class Creature {
         // --- 追加: 仲間の重心と密度 (3) ---
         let friends = creatures.filter(c => (this.type==='herb' ? c.type==='herb' : (c.config && this.config && c.config.id===this.config.id)) && c!==this);
         let avgDx = 0, avgDy = 0, fCount = 0;
-        const viewRad = 250;
+        const viewRad = 200;
         friends.forEach(f => {
             let dx = f.x - this.x, dy = f.y - this.y;
             if (Math.abs(dx) > canvas.width / 2) dx -= Math.sign(dx) * canvas.width;
