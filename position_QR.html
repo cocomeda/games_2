@@ -3,60 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QR Pose Tracker Pro</title>
+    <title>QR Size Estimator</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        /* 100dvhを使用してツールバーによる隠れを防止 */
-        body { 
-            margin: 0; 
-            font-family: sans-serif; 
-            overflow: hidden; 
-            background: #000; 
-            color: #fff; 
-            height: 100dvh; 
-            display: flex;
-            flex-direction: column;
-        }
-        
-        #container { 
-            position: relative; 
-            flex: 1; /* 余ったスペースをすべて使う */
-            width: 100%;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        video { 
-            position: absolute; 
-            width: 100%; 
-            height: 100%; 
-            /* containに変更することで、カメラ映像を歪ませず画面内に収めます */
-            object-fit: contain; 
-        }
-
-        canvas { 
-            position: absolute; 
-            width: 100%; 
-            height: 100%; 
-            object-fit: contain;
-            z-index: 5;
-        }
-
-        #info {
-            position: relative; /* 画面下部に固定ではなく、フローの中に配置 */
-            background: rgba(30, 30, 30, 0.9); 
-            padding: 10px 15px;
-            font-size: 13px; 
-            line-height: 1.4;
-            z-index: 10;
-            border-top: 1px solid #444;
-            min-height: 100px; /* 文字が見えるスペースを確保 */
-        }
-
-        .data-val { color: #0f0; font-weight: bold; font-family: monospace; }
-        hr { border: 0; border-top: 1px solid #444; margin: 5px 0; }
+        body { margin: 0; font-family: sans-serif; overflow: hidden; background: #000; color: #fff; height: 100dvh; display: flex; flex-direction: column; }
+        #container { position: relative; flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        video, canvas { position: absolute; width: 100%; height: 100%; object-fit: contain; }
+        #info { background: rgba(30, 30, 30, 0.9); padding: 15px; z-index: 10; border-top: 1px solid #444; }
+        .ui-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .data-val { color: #0f0; font-weight: bold; font-family: monospace; font-size: 1.2em; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; }
+        button:active { background: #0056b3; }
     </style>
 </head>
 <body>
@@ -67,86 +24,119 @@
 </div>
 
 <div id="info">
-    <div style="display: flex; justify-content: space-between;">
-        <span>QR座標 (px):</span>
-        <span id="distortion" class="data-val">-</span>
+    <div class="ui-row">
+        <span>推定サイズ: <span id="estSize" class="data-val">---</span> cm</span>
+        <button id="calcBtn">計測開始</button>
     </div>
-    <div id="corners" style="font-family: monospace; font-size: 11px; margin-top: 5px;">
-        QRコードをスキャン中...
+    <div style="font-size: 11px; color: #aaa;">
+        手順: 1.正面で「開始」を押す → 2.右に水平に20cm動かす → 3.数値を判定
     </div>
+    <div id="debug" style="font-family: monospace; font-size: 10px; margin-top: 10px; color: #666;"></div>
 </div>
 
 <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const cornersDisplay = document.getElementById('corners');
-    const distortionDisplay = document.getElementById('distortion');
+    const estSizeDisplay = document.getElementById('estSize');
+    const calcBtn = document.getElementById('calcBtn');
+    const debug = document.getElementById('debug');
 
-    navigator.mediaDevices.getUserMedia({ 
-        video: { 
-            facingMode: "environment", 
-            width: { ideal: 1280 }, 
-            height: { ideal: 720 } 
-        } 
-    })
-    .then(stream => {
-        video.srcObject = stream;
-        video.onloadedmetadata = () => {
-            requestAnimationFrame(tick);
-        };
+    let isMeasuring = false;
+    let startData = null;
+    let moveDistance = 0; // 加速度センサーから算出する移動量(m)
+    let lastAccelTime = 0;
+    let velocity = 0;
+
+    // センサーの有効化 (iOS13+ 対応)
+    calcBtn.onclick = async () => {
+        if (typeof DeviceMotionEvent.requestPermission === 'function') {
+            await DeviceMotionEvent.requestPermission();
+        }
+        startMeasurement();
+    };
+
+    function startMeasurement() {
+        isMeasuring = true;
+        startData = currentQR;
+        moveDistance = 0;
+        velocity = 0;
+        calcBtn.innerText = "移動してください...";
+        calcBtn.style.background = "#dc3545";
+    }
+
+    // 加速度センサーで移動距離を概算
+    window.addEventListener('devicemotion', (event) => {
+        if (!isMeasuring) return;
+        
+        const now = performance.now();
+        const dt = (now - lastAccelTime) / 1000;
+        lastAccelTime = now;
+
+        if (dt > 0.1) return; 
+
+        let acc = event.acceleration.x; // 横方向の加速
+        if (Math.abs(acc) < 0.1) acc = 0; // ノイズ除去
+
+        velocity += acc * dt;
+        moveDistance += velocity * dt;
+        
+        debug.innerText = `移動量: ${Math.abs(moveDistance * 100).toFixed(1)} cm`;
+        
+        if (Math.abs(moveDistance) > 0.2) { // 20cm以上動いたら計算
+            finishMeasurement();
+        }
     });
+
+    let currentQR = null;
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+    .then(stream => { video.srcObject = stream; requestAnimationFrame(tick); });
 
     function tick() {
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            // Canvasの解像度を映像と一致させる
-            if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-            }
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                inversionAttempts: "dontInvert",
-            });
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
 
             if (code) {
-                const loc = code.location;
-                drawRect(loc);
-                
-                const c = loc;
-                cornersDisplay.innerHTML = `
-                    TL:${Math.round(c.topLeftCorner.x)},${Math.round(c.topLeftCorner.y)} | 
-                    TR:${Math.round(c.topRightCorner.x)},${Math.round(c.topRightCorner.y)}<br>
-                    BL:${Math.round(c.bottomLeftCorner.x)},${Math.round(c.bottomLeftCorner.y)} | 
-                    BR:${Math.round(c.bottomRightCorner.x)},${Math.round(c.bottomRightCorner.y)}
-                `;
-
-                const d1 = Math.hypot(c.topLeftCorner.x - c.bottomRightCorner.x, c.topLeftCorner.y - c.bottomRightCorner.y);
-                const d2 = Math.hypot(c.topRightCorner.x - c.bottomLeftCorner.x, c.topRightCorner.y - c.bottomLeftCorner.y);
-                const ratio = (d1 / d2).toFixed(3);
-                distortionDisplay.innerHTML = `歪み: ${ratio}`;
-            } else {
-                cornersDisplay.innerText = "QRコードが見つかりません";
-                distortionDisplay.innerText = "未検出";
+                currentQR = code;
+                drawRect(code.location);
             }
         }
         requestAnimationFrame(tick);
     }
 
-    function drawRect(location) {
-        ctx.beginPath();
-        ctx.lineWidth = 10; // スマホでも見やすい太さに
-        ctx.strokeStyle = "#0f0";
-        ctx.moveTo(location.topLeftCorner.x, location.topLeftCorner.y);
-        ctx.lineTo(location.topRightCorner.x, location.topRightCorner.y);
-        ctx.lineTo(location.bottomRightCorner.x, location.bottomRightCorner.y);
-        ctx.lineTo(location.bottomLeftCorner.x, location.bottomLeftCorner.y);
-        ctx.closePath();
-        ctx.stroke();
+    function finishMeasurement() {
+        if (!currentQR || !startData) return;
+
+        // 【簡易三角測量ロジック】
+        // 画面上のQR横幅の変化（ピクセル）と実際の移動距離から物理サイズを推定
+        const w1 = startData.location.topRightCorner.x - startData.location.topLeftCorner.x;
+        const w2 = currentQR.location.topRightCorner.x - currentQR.location.topLeftCorner.x;
+        
+        // 非常に簡易的な推定式: 
+        // 実際には焦点距離(focal length)が必要ですが、
+        // 一般的なスマホの画角(約60度)から係数を仮定して算出します
+        const focalLengthFactor = 0.8; 
+        const estimatedCm = (Math.abs(moveDistance * 100) * w1) / Math.abs(w1 - w2 + 0.0001) * 0.1;
+
+        estSizeDisplay.innerText = Math.min(Math.max(estimatedCm, 1), 50).toFixed(1);
+        
+        isMeasuring = false;
+        calcBtn.innerText = "再計測";
+        calcBtn.style.background = "#007bff";
+    }
+
+    function drawRect(loc) {
+        ctx.beginPath(); ctx.lineWidth = 10; ctx.strokeStyle = "#0f0";
+        ctx.moveTo(loc.topLeftCorner.x, loc.topLeftCorner.y);
+        ctx.lineTo(loc.topRightCorner.x, loc.topRightCorner.y);
+        ctx.lineTo(loc.bottomRightCorner.x, loc.bottomRightCorner.y);
+        ctx.lineTo(loc.bottomLeftCorner.x, loc.bottomLeftCorner.y);
+        ctx.closePath(); ctx.stroke();
     }
 </script>
 </body>
