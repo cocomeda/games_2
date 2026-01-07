@@ -27,7 +27,6 @@
             touch-action: manipulation;
         }
 
-        /* コンテナの幅を画面いっぱいに（最大600px程度に制限して使いやすさを維持） */
         #game-container { 
             width: 100%;
             max-width: 500px; 
@@ -51,7 +50,6 @@
         .label-text { font-size: 13px; opacity: 0.7; letter-spacing: 1px; }
         .value-text { font-size: 16px; font-weight: bold; width: 85px; }
 
-        /* グリッドを画面幅（vw）に合わせて可変に */
         #grid-wrapper { 
             position: relative; 
             width: 90vw; 
@@ -75,15 +73,20 @@
             box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
         }
 
+        /* --- タイル枠の修正 --- */
         .cell {
-            background: var(--card-bg);
+            background: #32324d; 
+            border: 1px solid rgba(255, 255, 255, 0.15);
             border-radius: 8px;
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+            box-shadow: inset 0 0 12px rgba(0,0,0,0.4);
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-sizing: border-box;
         }
-        .cell.active { background: var(--active) !important; box-shadow: 0 0 25px var(--active); transform: scale(0.92); }
-        .cell.correct { background: var(--success); transform: scale(0.95); }
-        .cell.wrong { background: var(--error); transform: scale(0.95); }
+        /* -------------------- */
+
+        .cell.active { background: var(--active) !important; box-shadow: 0 0 25px var(--active); transform: scale(0.92); border-color: transparent; }
+        .cell.correct { background: var(--success); transform: scale(0.95); border-color: transparent; }
+        .cell.wrong { background: var(--error); transform: scale(0.95); border-color: transparent; }
         .cell.all-success { background: var(--success); opacity: 0.6; }
 
         #success-screen {
