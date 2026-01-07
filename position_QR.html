@@ -2,20 +2,61 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>QR Pose Tracker Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        body { margin: 0; font-family: sans-serif; overflow: hidden; background: #000; color: #fff; }
-        #container { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
-        video { position: absolute; width: 100%; height: 100%; object-fit: cover; }
-        canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; } /* CanvasもVideoと同じフィット感に修正 */
-        #info {
-            position: absolute; bottom: 20px; left: 10px; right: 10px;
-            background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px;
-            font-size: 12px; line-height: 1.5; pointer-events: none; z-index: 10;
+        /* 100dvhを使用してツールバーによる隠れを防止 */
+        body { 
+            margin: 0; 
+            font-family: sans-serif; 
+            overflow: hidden; 
+            background: #000; 
+            color: #fff; 
+            height: 100dvh; 
+            display: flex;
+            flex-direction: column;
         }
-        .data-val { color: #0f0; font-weight: bold; }
+        
+        #container { 
+            position: relative; 
+            flex: 1; /* 余ったスペースをすべて使う */
+            width: 100%;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video { 
+            position: absolute; 
+            width: 100%; 
+            height: 100%; 
+            /* containに変更することで、カメラ映像を歪ませず画面内に収めます */
+            object-fit: contain; 
+        }
+
+        canvas { 
+            position: absolute; 
+            width: 100%; 
+            height: 100%; 
+            object-fit: contain;
+            z-index: 5;
+        }
+
+        #info {
+            position: relative; /* 画面下部に固定ではなく、フローの中に配置 */
+            background: rgba(30, 30, 30, 0.9); 
+            padding: 10px 15px;
+            font-size: 13px; 
+            line-height: 1.4;
+            z-index: 10;
+            border-top: 1px solid #444;
+            min-height: 100px; /* 文字が見えるスペースを確保 */
+        }
+
+        .data-val { color: #0f0; font-weight: bold; font-family: monospace; }
+        hr { border: 0; border-top: 1px solid #444; margin: 5px 0; }
     </style>
 </head>
 <body>
@@ -23,12 +64,15 @@
 <div id="container">
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
-    <div id="info">
-        <div>QR位置 (px):</div>
-        <div id="corners">未検出</div>
-        <hr>
-        <div>歪み係数 (推定): <span id="distortion" class="data-val">-</span></div>
-        <p style="font-size: 10px;">※四隅の座標(x,y)を取得中</p>
+</div>
+
+<div id="info">
+    <div style="display: flex; justify-content: space-between;">
+        <span>QR座標 (px):</span>
+        <span id="distortion" class="data-val">-</span>
+    </div>
+    <div id="corners" style="font-family: monospace; font-size: 11px; margin-top: 5px;">
+        QRコードをスキャン中...
     </div>
 </div>
 
@@ -40,21 +84,28 @@
     const distortionDisplay = document.getElementById('distortion');
 
     navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
+        video: { 
+            facingMode: "environment", 
+            width: { ideal: 1280 }, 
+            height: { ideal: 720 } 
+        } 
     })
     .then(stream => {
         video.srcObject = stream;
-        requestAnimationFrame(tick);
+        video.onloadedmetadata = () => {
+            requestAnimationFrame(tick);
+        };
     });
 
     function tick() {
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            // 映像の本来の解像度をCanvasにセット（ここがズレていると伸びる原因になります）
+            // Canvasの解像度を映像と一致させる
             if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
             }
 
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -68,19 +119,19 @@
                 
                 const c = loc;
                 cornersDisplay.innerHTML = `
-                    TL: (${Math.round(c.topLeftCorner.x)}, ${Math.round(c.topLeftCorner.y)})<br>
-                    TR: (${Math.round(c.topRightCorner.x)}, ${Math.round(c.topRightCorner.y)})<br>
-                    BL: (${Math.round(c.bottomLeftCorner.x)}, ${Math.round(c.bottomLeftCorner.y)})<br>
-                    BR: (${Math.round(c.bottomRightCorner.x)}, ${Math.round(c.bottomRightCorner.y)})
+                    TL:${Math.round(c.topLeftCorner.x)},${Math.round(c.topLeftCorner.y)} | 
+                    TR:${Math.round(c.topRightCorner.x)},${Math.round(c.topRightCorner.y)}<br>
+                    BL:${Math.round(c.bottomLeftCorner.x)},${Math.round(c.bottomLeftCorner.y)} | 
+                    BR:${Math.round(c.bottomRightCorner.x)},${Math.round(c.bottomRightCorner.y)}
                 `;
 
                 const d1 = Math.hypot(c.topLeftCorner.x - c.bottomRightCorner.x, c.topLeftCorner.y - c.bottomRightCorner.y);
                 const d2 = Math.hypot(c.topRightCorner.x - c.bottomLeftCorner.x, c.topRightCorner.y - c.bottomLeftCorner.y);
                 const ratio = (d1 / d2).toFixed(3);
-                distortionDisplay.innerText = ratio + " (1.0に近ければ正面)";
+                distortionDisplay.innerHTML = `歪み: ${ratio}`;
             } else {
-                cornersDisplay.innerText = "QRコードを映してください";
-                distortionDisplay.innerText = "-";
+                cornersDisplay.innerText = "QRコードが見つかりません";
+                distortionDisplay.innerText = "未検出";
             }
         }
         requestAnimationFrame(tick);
@@ -88,7 +139,7 @@
 
     function drawRect(location) {
         ctx.beginPath();
-        ctx.lineWidth = 6;
+        ctx.lineWidth = 10; // スマホでも見やすい太さに
         ctx.strokeStyle = "#0f0";
         ctx.moveTo(location.topLeftCorner.x, location.topLeftCorner.y);
         ctx.lineTo(location.topRightCorner.x, location.topRightCorner.y);
