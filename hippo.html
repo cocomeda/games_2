@@ -6,14 +6,15 @@
     <title>Hippocampus Trainer Pro</title>
     <style>
         :root {
-            --bg-color: #1e1e2f;
-            --card-bg: #2a2a40;
-            --accent-color: #7289da;
-            --text-color: #ffffff;
+            /* 背景を薄いグレー/オフホワイト系に変更 */
+            --bg-color: #f0f2f5; 
+            --card-bg: #ffffff;
+            --accent-color: #4e5d94; /* 背景に合わせて少し落ち着いたトーンに */
+            --text-color: #333333;
             --success: #43b581;
             --error: #f04747;
             --active: #faa61a;
-            --lock-bg: rgba(0, 0, 0, 0.5);
+            --lock-bg: rgba(255, 255, 255, 0.6); /* ロック時も白ベースに */
         }
 
         body {
@@ -34,21 +35,23 @@
             position: relative; 
         }
 
-        h1 { font-size: 18px; font-weight: 300; letter-spacing: 2px; margin-bottom: 15px; color: var(--accent-color); }
+        h1 { font-size: 18px; font-weight: 600; letter-spacing: 2px; margin-bottom: 15px; color: var(--accent-color); }
 
         .setting-box {
             background: var(--card-bg);
             padding: 15px;
             border-radius: 20px;
             margin-bottom: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            /* 影を柔らかく */
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         }
 
         .control-row { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; }
-        .btn-small { width: 40px; height: 40px; font-size: 20px; border: none; border-radius: 12px; background: #36393f; color: white; cursor: pointer; transition: 0.2s; }
-        .btn-small:active { background: var(--accent-color); transform: scale(0.9); }
-        .label-text { font-size: 13px; opacity: 0.7; letter-spacing: 1px; }
-        .value-text { font-size: 16px; font-weight: bold; width: 85px; }
+        /* ボタンの色味を調整 */
+        .btn-small { width: 40px; height: 40px; font-size: 20px; border: none; border-radius: 12px; background: #e4e6eb; color: #333; cursor: pointer; transition: 0.2s; }
+        .btn-small:active { background: var(--accent-color); color: white; transform: scale(0.9); }
+        .label-text { font-size: 13px; opacity: 0.6; letter-spacing: 1px; font-weight: bold; }
+        .value-text { font-size: 16px; font-weight: bold; width: 85px; color: var(--accent-color); }
 
         #grid-wrapper { 
             position: relative; 
@@ -58,7 +61,7 @@
             max-height: 400px;
             margin: 25px auto; 
         }
-        .grid { display: grid; gap: 8px; width: 100%; height: 100%; }
+        .grid { display: grid; gap: 10px; width: 100%; height: 100%; }
         
         #lock-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -70,24 +73,24 @@
             align-items: center;
             z-index: 10;
             font-size: 50px;
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+            border: 2px solid rgba(0,0,0,0.05);
         }
 
-        /* --- タイル枠の修正 --- */
+        /* タイルの色味を背景に合わせて調整 */
         .cell {
-            background: #32324d; 
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 8px;
-            box-shadow: inset 0 0 12px rgba(0,0,0,0.4);
+            background: #ffffff;
+            border: 2px solid darkgray; /* 枠線を少し太くはっきり */
+            border-radius: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); /* 外側に軽い影 */
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             box-sizing: border-box;
+            cursor: pointer;
         }
-        /* -------------------- */
 
-        .cell.active { background: var(--active) !important; box-shadow: 0 0 25px var(--active); transform: scale(0.92); border-color: transparent; }
-        .cell.correct { background: var(--success); transform: scale(0.95); border-color: transparent; }
-        .cell.wrong { background: var(--error); transform: scale(0.95); border-color: transparent; }
-        .cell.all-success { background: var(--success); opacity: 0.6; }
+        .cell.active { background: var(--active) !important; border-color: var(--active); box-shadow: 0 0 20px rgba(250, 166, 26, 0.4); transform: scale(0.92); }
+        .cell.correct { background: var(--success) !important; border-color: var(--success); transform: scale(0.95); }
+        .cell.wrong { background: var(--error) !important; border-color: var(--error); transform: scale(0.95); }
+        .cell.all-success { background: var(--success); opacity: 0.4; }
 
         #success-screen {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0);
@@ -97,22 +100,23 @@
             display: flex; flex-direction: column; justify-content: center; align-items: center;
             z-index: 100;
             transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            box-shadow: 0 0 60px rgba(67, 181, 129, 0.6);
+            box-shadow: 0 10px 40px rgba(67, 181, 129, 0.4);
             pointer-events: none;
+            color: white;
         }
         #success-screen.show { transform: translate(-50%, -50%) scale(1); }
         .check-mark { font-size: 70px; margin-bottom: -5px; }
 
         #start-btn {
             width: 100%; padding: 18px; font-size: 18px; border: none; border-radius: 15px;
-            background: linear-gradient(135deg, #7289da, #5b6eae); color: white; font-weight: bold;
-            cursor: pointer; box-shadow: 0 5px 20px rgba(114, 137, 218, 0.4);
+            background: linear-gradient(135deg, #4e5d94, #7289da); color: white; font-weight: bold;
+            cursor: pointer; box-shadow: 0 8px 25px rgba(114, 137, 218, 0.3);
             letter-spacing: 3px;
             -webkit-tap-highlight-color: transparent;
         }
-        #start-btn:active { transform: translateY(2px); filter: brightness(1.1); }
+        #start-btn:active { transform: translateY(2px); box-shadow: 0 4px 10px rgba(114, 137, 218, 0.3); }
 
-        #status { font-size: 18px; margin: 15px 0; min-height: 1.5em; font-weight: 300; letter-spacing: 1px; }
+        #status { font-size: 18px; margin: 15px 0; min-height: 1.5em; font-weight: 600; color: #555; }
         .wait-timer { color: var(--active); font-weight: bold; font-size: 24px; margin-left: 10px; }
     </style>
 </head>
