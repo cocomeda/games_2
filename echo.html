@@ -2,80 +2,160 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Web Echo System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Improved Web Echo System</title>
     <style>
-        body { background: #111; color: #0f0; font-family: monospace; text-align: center; }
-        canvas { border: 1px solid #0f0; width: 80%; height: 300px; background: #000; }
-        button { padding: 10px 20px; font-size: 1.2rem; cursor: pointer; background: #0f0; border: none; }
+        body { background: #001a00; color: #00ff00; font-family: 'Courier New', monospace; text-align: center; margin: 0; padding: 20px; }
+        #status { font-size: 0.9rem; margin-bottom: 10px; color: #aaa; }
+        #rec-lamp { display: inline-block; width: 10px; height: 10px; background: #333; border-radius: 50%; margin-right: 5px; }
+        .recording #rec-lamp { background: #ff0000; box-shadow: 0 0 10px #ff0000; }
+        
+        canvas { 
+            border: 2px solid #004400; 
+            width: 100%; 
+            max-width: 800px; 
+            height: 300px; 
+            background: #000;
+            display: block;
+            margin: 20px auto;
+        }
+        
+        .controls { margin: 20px; }
+        button { 
+            padding: 15px 30px; 
+            font-size: 1.1rem; 
+            font-weight: bold;
+            cursor: pointer; 
+            background: #00ff00; 
+            border: none; 
+            color: #000;
+            border-radius: 5px;
+        }
+        button:active { background: #008800; }
+        #log { font-size: 0.8rem; color: #666; margin-top: 10px; }
     </style>
 </head>
 <body>
-    <h1>Echo Tester</h1>
-    <p>「Ping」を鳴らして、マイクが拾った音の変化を観察してください。</p>
-    <button id="pingBtn">Pingを発信</button><br><br>
+
+    <h1>ECHO LOCATOR v2</h1>
+    
+    <div id="status" class="">
+        <span id="rec-lamp"></span> <span id="status-text">マイク未接続 - ボタンを押して開始</span>
+    </div>
+
     <canvas id="visualizer"></canvas>
+
+    <div class="controls">
+        <button id="pingBtn">PING 発信</button>
+    </div>
+
+    <div id="log">※ 周囲が静かな場所で、音量を上げて試してください</div>
 
     <script>
         const canvas = document.getElementById('visualizer');
         const ctx = canvas.getContext('2d');
+        const statusDiv = document.getElementById('status');
+        const statusText = document.getElementById('status-text');
+        
         let audioCtx, analyser, dataArray;
+        let isInitialized = false;
 
         async function initAudio() {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const source = audioCtx.createMediaStreamSource(stream);
-            
-            analyser = audioCtx.createAnalyser();
-            analyser.fftSize = 2048;
-            source.connect(analyser);
-            
-            dataArray = new Uint8Array(analyser.frequencyBinCount);
-            draw();
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // マイクの使用許可を求める
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: false, // エコー除去を切る（エコーを見たいので）
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    } 
+                });
+
+                const source = audioCtx.createMediaStreamSource(stream);
+                analyser = audioCtx.createAnalyser();
+                
+                // 感度を最大級に上げる設定
+                analyser.fftSize = 512;
+                analyser.minDecibels = -85; // かなり小さな音も拾う
+                analyser.maxDecibels = -10;
+                
+                source.connect(analyser);
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+                
+                statusDiv.classList.add('recording');
+                statusText.innerText = "リスニング中...";
+                isInitialized = true;
+                draw();
+                
+            } catch (err) {
+                console.error(err);
+                statusText.innerText = "エラー: マイクへのアクセスが拒否されました";
+                statusText.style.color = "red";
+            }
         }
 
-        // 音を発信する関数（パルス生成）
         function sendPing() {
-            if (!audioCtx) initAudio();
-            
+            if (!isInitialized) return;
+
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
 
-            osc.type = 'sine'; // 澄んだ音
-            osc.frequency.setValueAtTime(3000, audioCtx.currentTime); // 3kHz
-            
-            // 短いパルス音（0.05秒で消える）を作る
-            gain.gain.setValueAtTime(1, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+            // コウモリのようなチャープ音（高音からさらに高音へスウィープ）
+            const startTime = audioCtx.currentTime;
+            const duration = 0.05;
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(2000, startTime);
+            osc.frequency.exponentialRampToValueAtTime(8000, startTime + duration);
+
+            gain.gain.setValueAtTime(0.5, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
 
             osc.connect(gain);
             gain.connect(audioCtx.destination);
 
             osc.start();
-            osc.stop(audioCtx.currentTime + 0.05);
+            osc.stop(startTime + duration);
         }
 
-        // 可視化（マイクが拾っている音を表示）
         function draw() {
             requestAnimationFrame(draw);
             analyser.getByteFrequencyData(dataArray);
 
-            ctx.fillStyle = 'black';
+            // 背景を薄く塗りつぶす（残像エフェクト）
+            ctx.fillStyle = 'rgba(0, 20, 0, 0.2)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            const barWidth = (canvas.width / dataArray.length) * 2.5;
+            const barWidth = (canvas.width / dataArray.length) * 2;
             let x = 0;
 
             for (let i = 0; i < dataArray.length; i++) {
-                const barHeight = dataArray[i];
-                ctx.fillStyle = `rgb(0, ${barHeight + 100}, 0)`;
-                ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-                x += barWidth + 1;
+                const barHeight = (dataArray[i] / 255) * canvas.height;
+                
+                // 低音は暗く、高音は明るく表示
+                const hue = 120; // 緑
+                const sat = 100;
+                const light = dataArray[i] / 2.5; 
+                
+                ctx.fillStyle = `hsl(${hue}, ${sat}%, ${light}%)`;
+                ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
+                x += barWidth;
             }
         }
 
-        document.getElementById('pingBtn').addEventListener('click', () => {
-            if (!audioCtx) initAudio().then(sendPing);
-            else sendPing();
+        document.getElementById('pingBtn').addEventListener('click', async () => {
+            if (!isInitialized) {
+                await initAudio();
+                // 少し待ってから最初のPingを打つ
+                setTimeout(sendPing, 500);
+            } else {
+                if (audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
+                }
+                sendPing();
+            }
         });
     </script>
 </body>
