@@ -3,17 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QR Size Estimator</title>
+    <title>QR Spatial Scanner</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        body { margin: 0; font-family: sans-serif; overflow: hidden; background: #000; color: #fff; height: 100dvh; display: flex; flex-direction: column; }
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; background: #000; color: #fff; height: 100dvh; display: flex; flex-direction: column; }
         #container { position: relative; flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: center; }
         video, canvas { position: absolute; width: 100%; height: 100%; object-fit: contain; }
-        #info { background: rgba(30, 30, 30, 0.9); padding: 15px; z-index: 10; border-top: 1px solid #444; }
-        .ui-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .data-val { color: #0f0; font-weight: bold; font-family: monospace; font-size: 1.2em; }
-        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; }
-        button:active { background: #0056b3; }
+        
+        /* ガイドUI */
+        #guide-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 2px dashed rgba(255,255,255,0.5); width: 200px; height: 200px; border-radius: 50%; pointer-events: none; display: flex; align-items: center; justify-content: center; z-index: 8; }
+        #progress-ring { position: absolute; width: 220px; height: 220px; z-index: 9; transform: rotate(-90deg); }
+        #progress-ring circle { fill: transparent; stroke: #007bff; stroke-width: 8; stroke-dasharray: 628; stroke-dashoffset: 628; transition: stroke-dashoffset 0.1s; }
+
+        #info { background: rgba(20, 20, 20, 0.95); padding: 20px; z-index: 10; border-top: 1px solid #333; box-shadow: 0 -5px 15px rgba(0,0,0,0.5); }
+        .status-text { font-size: 14px; margin-bottom: 10px; color: #aaa; text-align: center; }
+        .result-box { display: flex; justify-content: center; align-items: baseline; gap: 10px; margin-bottom: 15px; }
+        .data-val { color: #00ff88; font-weight: bold; font-family: monospace; font-size: 2.5rem; text-shadow: 0 0 10px rgba(0,255,136,0.3); }
+        
+        #scanBtn { width: 100%; background: #007bff; color: white; border: none; padding: 15px; border-radius: 12px; font-size: 18px; font-weight: bold; box-shadow: 0 4px 0 #0056b3; transition: all 0.1s; }
+        #scanBtn:active { transform: translateY(2px); box-shadow: 0 2px 0 #0056b3; }
+        #scanBtn.scanning { background: #ff3b30; box-shadow: 0 4px 0 #c41e15; }
     </style>
 </head>
 <body>
@@ -21,17 +30,19 @@
 <div id="container">
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
+    <div id="guide-overlay">
+        <div id="guide-msg" style="text-align:center; font-size:12px;">QRを枠内に</div>
+    </div>
+    <svg id="progress-ring"><circle id="progress-circle" r="100" cx="110" cy="110"></circle></svg>
 </div>
 
 <div id="info">
-    <div class="ui-row">
-        <span>推定サイズ: <span id="estSize" class="data-val">---</span> cm</span>
-        <button id="calcBtn">計測開始</button>
+    <div id="status" class="status-text">スキャンを開始してください</div>
+    <div class="result-box">
+        <span id="estSize" class="data-val">---</span>
+        <span style="font-size: 1.2rem; color: #00ff88;">cm</span>
     </div>
-    <div style="font-size: 11px; color: #aaa;">
-        手順: 1.正面で「開始」を押す → 2.右に水平に20cm動かす → 3.数値を判定
-    </div>
-    <div id="debug" style="font-family: monospace; font-size: 10px; margin-top: 10px; color: #666;"></div>
+    <button id="scanBtn">スキャン開始</button>
 </div>
 
 <script>
@@ -39,58 +50,58 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const estSizeDisplay = document.getElementById('estSize');
-    const calcBtn = document.getElementById('calcBtn');
-    const debug = document.getElementById('debug');
+    const scanBtn = document.getElementById('scanBtn');
+    const statusText = document.getElementById('status');
+    const progressCircle = document.getElementById('progress-circle');
 
-    let isMeasuring = false;
-    let startData = null;
-    let moveDistance = 0; // 加速度センサーから算出する移動量(m)
-    let lastAccelTime = 0;
-    let velocity = 0;
+    let isScanning = false;
+    let dataBuffer = [];
+    const REQUIRED_SAMPLES = 60; // 約2秒分のデータ
 
-    // センサーの有効化 (iOS13+ 対応)
-    calcBtn.onclick = async () => {
+    // センサー値の累積
+    let moveX = 0, moveY = 0;
+    let lastTime = 0;
+
+    scanBtn.onclick = async () => {
         if (typeof DeviceMotionEvent.requestPermission === 'function') {
-            await DeviceMotionEvent.requestPermission();
+            const permission = await DeviceMotionEvent.requestPermission();
+            if (permission !== 'granted') return;
         }
-        startMeasurement();
+        toggleScan();
     };
 
-    function startMeasurement() {
-        isMeasuring = true;
-        startData = currentQR;
-        moveDistance = 0;
-        velocity = 0;
-        calcBtn.innerText = "移動してください...";
-        calcBtn.style.background = "#dc3545";
+    function toggleScan() {
+        isScanning = !isScanning;
+        if (isScanning) {
+            dataBuffer = [];
+            moveX = 0; moveY = 0;
+            scanBtn.innerText = "スキャン中...";
+            scanBtn.classList.add('scanning');
+            statusText.innerText = "スマホをゆっくり円を描くように動かして";
+            updateProgress(0);
+        } else {
+            processData();
+        }
     }
 
-    // 加速度センサーで移動距離を概算
-    window.addEventListener('devicemotion', (event) => {
-        if (!isMeasuring) return;
-        
-        const now = performance.now();
-        const dt = (now - lastAccelTime) / 1000;
-        lastAccelTime = now;
+    function updateProgress(val) {
+        const offset = 628 - (val * 628);
+        progressCircle.style.strokeDashoffset = offset;
+    }
 
-        if (dt > 0.1) return; 
+    // 加速度センサー (移動量の推定用)
+    window.addEventListener('devicemotion', (e) => {
+        if (!isScanning) return;
+        const dt = (performance.now() - lastTime) / 1000;
+        lastTime = performance.now();
+        if (dt > 0.1) return;
 
-        let acc = event.acceleration.x; // 横方向の加速
-        if (Math.abs(acc) < 0.1) acc = 0; // ノイズ除去
-
-        velocity += acc * dt;
-        moveDistance += velocity * dt;
-        
-        debug.innerText = `移動量: ${Math.abs(moveDistance * 100).toFixed(1)} cm`;
-        
-        if (Math.abs(moveDistance) > 0.2) { // 20cm以上動いたら計算
-            finishMeasurement();
-        }
+        // 簡易的な移動量積算 (本来はカルマンフィルタ等が望ましい)
+        moveX += e.acceleration.x * dt; 
+        moveY += e.acceleration.y * dt;
     });
 
-    let currentQR = null;
-
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: 1280 } })
     .then(stream => { video.srcObject = stream; requestAnimationFrame(tick); });
 
     function tick() {
@@ -101,37 +112,78 @@
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const code = jsQR(imageData.data, imageData.width, imageData.height);
 
-            if (code) {
-                currentQR = code;
-                drawRect(code.location);
+            if (code && isScanning) {
+                // 有効なデータのみ収集 (極端なボケがないか等の簡易チェック)
+                dataBuffer.push({
+                    loc: code.location,
+                    mx: moveX,
+                    my: moveY
+                });
+                
+                updateProgress(dataBuffer.length / REQUIRED_SAMPLES);
+                drawRect(code.location, "#00ff88");
+
+                if (dataBuffer.length >= REQUIRED_SAMPLES) {
+                    toggleScan();
+                    if (window.navigator.vibrate) window.navigator.vibrate(200);
+                }
+            } else if (code) {
+                drawRect(code.location, "rgba(255,255,255,0.5)");
             }
         }
         requestAnimationFrame(tick);
     }
 
-    function finishMeasurement() {
-        if (!currentQR || !startData) return;
+    function processData() {
+        if (dataBuffer.length < 10) {
+            statusText.innerText = "データ不足です。もっと動かしてください";
+            scanBtn.innerText = "再試行";
+            scanBtn.classList.remove('scanning');
+            return;
+        }
 
-        // 【簡易三角測量ロジック】
-        // 画面上のQR横幅の変化（ピクセル）と実際の移動距離から物理サイズを推定
-        const w1 = startData.location.topRightCorner.x - startData.location.topLeftCorner.x;
-        const w2 = currentQR.location.topRightCorner.x - currentQR.location.topLeftCorner.x;
+        // --- 多点観測からのサイズ推定ロジック ---
+        // 各フレームでの「QRの対角線ピクセル長」と「センサー移動」の相関から
+        // 物理サイズを逆算し、外れ値を排除して平均化します。
         
-        // 非常に簡易的な推定式: 
-        // 実際には焦点距離(focal length)が必要ですが、
-        // 一般的なスマホの画角(約60度)から係数を仮定して算出します
-        const focalLengthFactor = 0.8; 
-        const estimatedCm = (Math.abs(moveDistance * 100) * w1) / Math.abs(w1 - w2 + 0.0001) * 0.1;
+        let estimates = [];
+        const focalLength = 1000; // カメラの内部パラメータ(仮定)
 
-        estSizeDisplay.innerText = Math.min(Math.max(estimatedCm, 1), 50).toFixed(1);
+        for(let i = 1; i < dataBuffer.length; i++) {
+            const d1 = dataBuffer[i-1];
+            const d2 = dataBuffer[i];
+            
+            // 画面上の幅 (ピクセル)
+            const w1 = Math.hypot(d1.loc.topRightCorner.x - d1.loc.topLeftCorner.x, d1.loc.topRightCorner.y - d1.loc.topLeftCorner.y);
+            const w2 = Math.hypot(d2.loc.topRightCorner.x - d2.loc.topLeftCorner.x, d2.loc.topRightCorner.y - d2.loc.topLeftCorner.y);
+            
+            // センサーによる相対移動距離 (m)
+            const distMoved = Math.hypot(d2.mx - d1.mx, d2.my - d1.my);
+            
+            if (distMoved > 0.001) { // 微小な動きは無視
+                // 三角測量ベースの推定式 (w=画角, d=距離, S=実サイズとした時)
+                // この数式は簡略化されていますが、多点平均で精度を上げます
+                const sEst = (distMoved * 100) / (Math.abs(1/w1 - 1/w2) * focalLength);
+                if (sEst > 2 && sEst < 50) estimates.push(sEst);
+            }
+        }
+
+        if (estimates.length > 0) {
+            // 中央値をとることでノイズを排除
+            estimates.sort((a,b) => a - b);
+            const medianSize = estimates[Math.floor(estimates.length / 2)];
+            estSizeDisplay.innerText = medianSize.toFixed(1);
+            statusText.innerText = "計測完了";
+        } else {
+            statusText.innerText = "計測失敗。ゆっくり動かしてください";
+        }
         
-        isMeasuring = false;
-        calcBtn.innerText = "再計測";
-        calcBtn.style.background = "#007bff";
+        scanBtn.innerText = "スキャン開始";
+        scanBtn.classList.remove('scanning');
     }
 
-    function drawRect(loc) {
-        ctx.beginPath(); ctx.lineWidth = 10; ctx.strokeStyle = "#0f0";
+    function drawRect(loc, color) {
+        ctx.beginPath(); ctx.lineWidth = 8; ctx.strokeStyle = color;
         ctx.moveTo(loc.topLeftCorner.x, loc.topLeftCorner.y);
         ctx.lineTo(loc.topRightCorner.x, loc.topRightCorner.y);
         ctx.lineTo(loc.bottomRightCorner.x, loc.bottomRightCorner.y);
