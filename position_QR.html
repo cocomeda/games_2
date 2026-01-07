@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Pose Tracker Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        body { margin: 0; font-family: sans-serif; overflow: hidden; background: #000; color: #fff; }
+        #container { position: relative; width: 100vw; height: 100vh; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #info {
+            position: absolute; bottom: 20px; left: 10px; right: 10px;
+            background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px;
+            font-size: 12px; line-height: 1.5; pointer-events: none;
+        }
+        .data-val { color: #0f0; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="container">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+    <div id="info">
+        <div>QR位置 (px):</div>
+        <div id="corners">未検出</div>
+        <hr>
+        <div>歪み係数 (推定): <span id="distortion" class="data-val">-</span></div>
+        <p style="font-size: 10px;">※四隅を検出し、その座標(x,y)を取得しています。</p>
+    </div>
+</div>
+
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const cornersDisplay = document.getElementById('corners');
+    const distortionDisplay = document.getElementById('distortion');
+
+    // カメラ起動
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(stream => {
+            video.srcObject = stream;
+            requestAnimationFrame(tick);
+        });
+
+    function tick() {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.height = video.videoHeight;
+            canvas.width = video.videoWidth;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: "dontInvert",
+            });
+
+            if (code) {
+                const loc = code.location;
+                drawRect(loc);
+                
+                // 4角の座標を表示
+                const c = loc;
+                cornersDisplay.innerHTML = `
+                    TL: (${Math.round(c.topLeftCorner.x)}, ${Math.round(c.topLeftCorner.y)})<br>
+                    TR: (${Math.round(c.topRightCorner.x)}, ${Math.round(c.topRightCorner.y)})<br>
+                    BL: (${Math.round(c.bottomLeftCorner.x)}, ${Math.round(c.bottomLeftCorner.y)})<br>
+                    BR: (${Math.round(c.bottomRightCorner.x)}, ${Math.round(c.bottomRightCorner.y)})
+                `;
+
+                // 簡易的な「歪み」の計算 (対角線の長さの比)
+                const d1 = Math.hypot(c.topLeftCorner.x - c.bottomRightCorner.x, c.topLeftCorner.y - c.bottomRightCorner.y);
+                const d2 = Math.hypot(c.topRightCorner.x - c.bottomLeftCorner.x, c.topRightCorner.y - c.bottomLeftCorner.y);
+                const ratio = (d1 / d2).toFixed(3);
+                distortionDisplay.innerText = ratio + " (1.0に近ければ正面)";
+            } else {
+                cornersDisplay.innerText = "QRコードを映してください";
+                distortionDisplay.innerText = "-";
+            }
+        }
+        requestAnimationFrame(tick);
+    }
+
+    function drawRect(location) {
+        ctx.beginPath();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "#0f0";
+        ctx.moveTo(location.topLeftCorner.x, location.topLeftCorner.y);
+        ctx.lineTo(location.topRightCorner.x, location.topRightCorner.y);
+        ctx.lineTo(location.bottomRightCorner.x, location.bottomRightCorner.y);
+        ctx.lineTo(location.bottomLeftCorner.x, location.bottomLeftCorner.y);
+        ctx.closePath();
+        ctx.stroke();
+    }
+</script>
+</body>
+</html>
