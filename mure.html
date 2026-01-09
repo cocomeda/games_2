@@ -2,19 +2,18 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Eco-Evolution v4.3 - Enemy Swarm Sensing</title>
+    <title>Eco-Evolution v4.4 - Wall Damage</title>
     <style>
         body { margin:0; background:#050505; overflow:hidden; color:#0f0; font-family:'Consolas',monospace; }
         canvas { display:block; }
-        /* UIを半透明にし、マウス操作を透過させることで視認性を向上 */
         .ui { 
             position:absolute; top:15px; left:15px; 
-            background:rgba(0, 0, 0, 0.5); /* 半透明 */
+            background:rgba(0, 0, 0, 0.5); 
             padding:15px; border-radius:8px; border:1px solid rgba(0, 255, 204, 0.3); 
-            min-width:280px; pointer-events: none; /* 下の個体が見えるようにマウス反応を消去 */
+            min-width:280px; pointer-events: none;
             z-index: 100;
         }
-        .controls { pointer-events: auto; } /* ボタンだけは操作可能にする */
+        .controls { pointer-events: auto; }
         .red { color: #ff4444; } .white { color: #ffffff; } .cyan { color: #00ffcc; }
         hr { border:0; border-top:1px solid rgba(255,255,255,0.2); margin:10px 0; }
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top:10px; }
@@ -27,7 +26,7 @@
 </head>
 <body>
     <div class="ui">
-        <b>ECO-EVOLUTION v4.3</b><hr>
+        <b>ECO-EVOLUTION v4.4</b><hr>
         <div style="display:flex; justify-content:space-between;">
             <span class="white">PREY: <span id="hCnt">0</span></span>
             <span class="red">HUNTER: <span id="pCnt">0</span></span>
@@ -43,7 +42,7 @@
                 <button onclick="triggerLoad('hunter')">肉食ロード</button>
             </div>
         </div>
-        <div id="log">12-input sensors active.</div>
+        <div id="log">Wall collision damage active.</div>
     </div>
     <input type="file" id="fileInput" accept=".json" onchange="handleFileLoad()">
     <canvas id="canvas"></canvas>
@@ -58,7 +57,7 @@ let loadTarget = 'prey';
 
 class Brain {
     constructor(weights = null) {
-        this.inputSize = 12; // 敵の群れ認識(2)を追加して12次元に
+        this.inputSize = 12;
         this.hiddenSize = 14; 
         if (weights && weights.w1.length === this.inputSize * this.hiddenSize) {
             this.w1 = new Float32Array(weights.w1).map(v => Math.random() < 0.08 ? v + (Math.random()-0.5)*0.2 : v);
@@ -98,7 +97,6 @@ class Creature {
         let inputs = [];
         let all = creatures;
         
-        // 1. 最寄りの敵 (1匹)
         let enemies = all.filter(c => c.type !== this.type);
         let nearest = null, minDist = 2000;
         for(let e of enemies) {
@@ -107,7 +105,6 @@ class Creature {
         }
         inputs.push(minDist / 800, nearest ? (Math.atan2(nearest.y - this.y, nearest.x - this.x) - this.angle) / Math.PI : 0);
 
-        // 2. 仲間の群れセンサー (半径150)
         let friends = all.filter(c => c.type === this.type && c !== this);
         let fCount = 0, fAvgDx = 0, fAvgDy = 0;
         friends.forEach(f => {
@@ -116,7 +113,6 @@ class Creature {
         });
         inputs.push(Math.min(fCount, 10) / 10, fCount > 0 ? (Math.atan2(fAvgDy, fAvgDx) - this.angle) / Math.PI : 0);
 
-        // 3. 敵の群れセンサー (新規追加: 半径150)
         let eCount = 0, eAvgDx = 0, eAvgDy = 0;
         enemies.forEach(e => {
             let d = Math.hypot(e.x - this.x, e.y - this.y);
@@ -124,12 +120,10 @@ class Creature {
         });
         inputs.push(Math.min(eCount, 10) / 10, eCount > 0 ? (Math.atan2(eAvgDy, eAvgDx) - this.angle) / Math.PI : 0);
 
-        // 4. 自己状態と環境
         inputs.push(this.energy / 100, Math.min(this.x, canvas.width-this.x, this.y, canvas.height-this.y) / 50);
         inputs.push(this.speed / 5, Math.sin(this.angle));
-        inputs.push(0, 0); // 予備
+        inputs.push(0, 0);
 
-        // 行動実行
         if (this.energy > 0) {
             let [turn, accel] = this.brain.predict(inputs);
             this.angle += turn * 0.2;
@@ -140,15 +134,24 @@ class Creature {
         this.x += Math.cos(this.angle) * this.speed;
         this.y += Math.sin(this.angle) * this.speed;
 
-        // 壁反射ロジック
-        if(this.x<0 || this.x>canvas.width) this.angle = Math.PI - this.angle;
-        if(this.y<0 || this.y>canvas.height) this.angle = -this.angle;
-        this.x = Math.max(0, Math.min(canvas.width, this.x));
-        this.y = Math.max(0, Math.min(canvas.height, this.y));
+        // --- 壁反射とダメージ判定 ---
+        let hitWall = false;
+        if(this.x <= 0 || this.x >= canvas.width) {
+            this.angle = Math.PI - this.angle;
+            hitWall = true;
+        }
+        if(this.y <= 0 || this.y >= canvas.height) {
+            this.angle = -this.angle;
+            hitWall = true;
+        }
+        if(hitWall) {
+            this.energy -= 1.0; // 壁ダメージ
+            this.x = Math.max(0, Math.min(canvas.width, this.x));
+            this.y = Math.max(0, Math.min(canvas.height, this.y));
+        }
 
-        // エネルギー処理
         if (this.type === 'hunter') {
-            const loss = 0.04 + (this.speed ** 2) * 0.027;
+            const loss = 0.04 + (this.speed ** 2) * 0.022;
             const hList = creatures.filter(c => c.type === 'hunter');
             if (!(hList.length <= 1 && this.energy <= loss)) this.energy -= loss;
             this.checkHunt();
@@ -202,7 +205,6 @@ class Creature {
     }
 }
 
-// 外部連携用
 function saveBrain(type) {
     const list = creatures.filter(c => c.type === type);
     if (list.length === 0) return;
@@ -211,7 +213,7 @@ function saveBrain(type) {
     const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `brain_v4.3_${type}.json`; a.click();
+    a.download = `brain_v4.4_${type}.json`; a.click();
 }
 
 function triggerLoad(type) { loadTarget = type; document.getElementById('fileInput').click(); }
@@ -223,8 +225,8 @@ function handleFileLoad() {
         try {
             const data = JSON.parse(e.target.result);
             creatures.filter(c => c.type === loadTarget).forEach(c => c.brain = new Brain(data));
-            document.getElementById('log').innerText = "Brain Loaded (12-dim).";
-        } catch(e) { document.getElementById('log').innerText = "Load Error: Check Data."; }
+            document.getElementById('log').innerText = "Brain Loaded.";
+        } catch(e) { document.getElementById('log').innerText = "Load Error."; }
     };
     reader.readAsText(file);
 }
