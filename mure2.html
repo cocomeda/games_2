@@ -138,7 +138,7 @@ class Creature{
         if(this.energy>0 || this.type==='hunter'){
             let [turn,accel]=this.brain.predict(inputs);
             this.angle+=turn*0.25;
-            this.speed=(this.type==='prey'?0.7:3.5)*Math.abs(accel);
+            this.speed=(this.type==='prey'?3.7:3.5)*Math.abs(accel);
             if(this.justHunted>0) this.speed*=0.3;
         }
 
