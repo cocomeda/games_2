@@ -2,309 +2,392 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Eco-Evolution v6.1 - Last Hunter Immortal</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Medaka Survival - Evolution v6.2 (Analytic)</title>
 <style>
-body { margin:0; background:#050505; overflow:hidden; color:#0f0; font-family:Consolas,monospace; }
-canvas { display:block; }
-.ui {
-    position:absolute; top:15px; left:15px;
-    background:rgba(0,0,0,0.5); padding:12px; border-radius:8px;
-    border:1px solid rgba(0,255,200,0.2); min-width:300px; z-index:100;
-}
-button { background:#222; color:#fff; border:1px solid #555; padding:5px; font-size:11px; cursor:pointer; }
-.btns { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:8px; }
-#log { font-size:11px; color:#aaa; margin-top:6px; }
-.cyan{color:#0fc;} .red{color:#f55;} .white{color:#fff;}
+  html,body{margin:0;padding:0;background:#0b1020;color:#e6f0ff;font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif;}
+  #ui{
+    position:fixed;left:10px;top:10px;z-index:10;
+    background:rgba(0,0,0,.55);backdrop-filter: blur(6px);
+    border:1px solid rgba(255,255,255,.12);border-radius:10px;
+    padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  #ui h3{margin:0 0 6px;font-size:14px;font-weight:700}
+  #ui .row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+  #ui button, #ui input{
+    background:#0f1a3a;color:#e6f0ff;border:1px solid rgba(255,255,255,.18);
+    border-radius:8px;padding:6px 10px;cursor:pointer
+  }
+  #ui button:hover{background:#15245a}
+  #stats{font-size:12px;line-height:1.5;white-space:pre}
+  canvas{display:block}
 </style>
 </head>
 <body>
-<div class="ui">
-<b>ECO-EVOLUTION v6.1</b><hr>
-<div>PREY: <span id="preyCnt">0</span>　HUNTER: <span id="hunterCnt">0</span></div>
-<div class="cyan">MEAT: <span id="meatCnt">0</span></div>
-<hr>
-<div class="btns">
-<button onclick="saveBrain('prey')">草食 保存</button>
-<button onclick="saveBrain('hunter')">肉食 保存</button>
-<button onclick="triggerLoad('prey')">草食 読込</button>
-<button onclick="triggerLoad('hunter')">肉食 読込</button>
+<div id="ui">
+  <h3>Medaka Survival v6.2 (Analytic)</h3>
+  <div class="row">
+    <button id="reset">Reset</button>
+    <button id="save">Save NN</button>
+    <input id="loadFile" type="file" accept="application/json"/>
+  </div>
+  <div id="stats"></div>
 </div>
-<div id="log">解析モード：最後のHUNTERは無敵</div>
-</div>
-<input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFileLoad()">
-<canvas id="canvas"></canvas>
+<canvas id="c"></canvas>
 
 <script>
-const canvas = document.getElementById('canvas');
+// ==============================
+// Utility
+// ==============================
+const rand = (a=0,b=1)=>a+Math.random()*(b-a);
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const dist = (x1,y1,x2,y2)=>Math.hypot(x1-x2,y1-y2);
+const wrap = (v, max)=> (v<0? v+max : (v>max? v-max : v));
+const lerp = (a,b,t)=>a+(b-a)*t;
+
+// ==============================
+// Canvas
+// ==============================
+const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-let creatures=[], meats=[], loadTarget='prey';
-
-////////////////////////////////////////////////////////////
-// Neural Network
-////////////////////////////////////////////////////////////
-class Brain {
-    constructor(weights=null){
-        this.inputSize=14;
-        this.hiddenSize=18;
-        if(weights){
-            this.w1=new Float32Array(weights.w1).map(v=>Math.random()<0.12? v+(Math.random()-0.5)*0.25:v);
-            this.w2=new Float32Array(weights.w2).map(v=>Math.random()<0.12? v+(Math.random()-0.5)*0.25:v);
-        }else{
-            this.w1=Float32Array.from({length:this.inputSize*this.hiddenSize},()=>Math.random()*2-1);
-            this.w2=Float32Array.from({length:this.hiddenSize*2},()=>Math.random()*2-1);
-        }
-    }
-    predict(inputs){
-        let h=new Float32Array(this.hiddenSize);
-        for(let i=0;i<this.hiddenSize;i++){
-            let sum=0;
-            for(let j=0;j<this.inputSize;j++) sum+=inputs[j]*this.w1[i*this.inputSize+j];
-            h[i]=Math.tanh(sum);
-        }
-        let out=[0,0];
-        for(let i=0;i<2;i++){
-            let sum=0;
-            for(let j=0;j<this.hiddenSize;j++) sum+=h[j]*this.w2[i*this.hiddenSize+j];
-            out[i]=Math.tanh(sum);
-        }
-        return out;
-    }
+function resize(){
+  canvas.width = innerWidth * devicePixelRatio;
+  canvas.height = innerHeight * devicePixelRatio;
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
 }
+addEventListener('resize', resize);
+resize();
 
-////////////////////////////////////////////////////////////
-// Creature
-////////////////////////////////////////////////////////////
-class Creature{
-    constructor(x,y,type,brain=null){
-        this.x=x; this.y=y; this.type=type;
-        this.energy=100; this.angle=Math.random()*Math.PI*2;
-        this.brain=(brain instanceof Brain)?brain:new Brain(brain);
-        this.speed=0; this.justHunted=0;
+// ==============================
+// World Params
+// ==============================
+const WORLD = {
+  preyCount: 120,
+  hunterCount: 6,
+  foodCount: 0, // 草食は餌を食べるが、数保存を優先し food は使わない
+  vision: 70,
+  sepDist: 10,
+  alignDist: 50,
+  cohesionDist: 70,
+  maxSpeed: 2.4,
+  friction: 0.995,
+  preyBaseDrain: 0.015,
+  preyMoveDrain: 0.03,
+  hunterBaseDrain: 0.02,
+  hunterMoveDrain: 0.06,
+  alignBonus: 0.02, // 整列時の省エネ
+  collisionPenalty: 0.25, // 分離（衝突）ペナルティ
+  huntRadius: 10,
+  postHuntSlow: 0.6, // 捕食直後の減速率
+  reproduceThreshold: 90,
+  mutation: 0.08
+};
+
+// ==============================
+// Neural Network (tiny)
+// ==============================
+class TinyNN{
+  // 5 inputs -> 6 hidden -> 2 outputs
+  constructor(data){
+    this.w1 = data?.w1 || Array.from({length:6}, ()=>Array.from({length:5}, ()=>rand(-1,1)));
+    this.b1 = data?.b1 || Array.from({length:6}, ()=>rand(-0.5,0.5));
+    this.w2 = data?.w2 || Array.from({length:2}, ()=>Array.from({length:6}, ()=>rand(-1,1)));
+    this.b2 = data?.b2 || Array.from({length:2}, ()=>rand(-0.5,0.5));
+  }
+  clone(mutate=true){
+    const d = JSON.parse(JSON.stringify(this));
+    const nn = new TinyNN(d);
+    if(mutate){
+      for(let i=0;i<6;i++){
+        for(let j=0;j<5;j++) if(Math.random()<0.2) nn.w1[i][j]+=rand(-WORLD.mutation, WORLD.mutation);
+        if(Math.random()<0.2) nn.b1[i]+=rand(-WORLD.mutation, WORLD.mutation);
+      }
+      for(let i=0;i<2;i++){
+        for(let j=0;j<6;j++) if(Math.random()<0.2) nn.w2[i][j]+=rand(-WORLD.mutation, WORLD.mutation);
+        if(Math.random()<0.2) nn.b2[i]+=rand(-WORLD.mutation, WORLD.mutation);
+      }
     }
-    normDist(d){ return 1/(1+d/120); }
-
-    update(){
-        let inputs=[];
-        let friends=creatures.filter(c=>c.type===this.type&&c!==this);
-        let enemies=creatures.filter(c=>c.type!==this.type);
-
-        // 1-2: 最近傍の敵
-        let ne=null, dmin=9999;
-        for(let e of enemies){
-            let d=Math.hypot(this.x-e.x,this.y-e.y);
-            if(d<dmin){dmin=d; ne=e;}
-        }
-        inputs.push(this.normDist(dmin));
-        inputs.push(ne? (Math.atan2(ne.y-this.y,ne.x-this.x)-this.angle)/Math.PI:0);
-
-        // 3-4: 味方の重心方向
-        let fx=0,fy=0,fc=0;
-        friends.forEach(f=>{
-            let d=Math.hypot(f.x-this.x,f.y-this.y);
-            if(d<120){fc++; fx+=f.x-this.x; fy+=f.y-this.y;}
-        });
-        inputs.push(Math.min(fc,8)/8);
-        inputs.push(fc? (Math.atan2(fy,fx)-this.angle)/Math.PI:0);
-
-        // 5-6: 味方平均との差（分離）
-        let closeCount=0;
-        friends.forEach(f=>{
-            let d=Math.hypot(f.x-this.x,f.y-this.y);
-            if(d<12) closeCount++;
-        });
-        inputs.push(Math.min(closeCount,5)/5);
-        inputs.push(0);
-
-        // 7-8: 敵の密度
-        let ec=0,ex=0,ey=0;
-        enemies.forEach(e=>{
-            let d=Math.hypot(e.x-this.x,e.y-this.y);
-            if(d<120){ec++; ex+=e.x-this.x; ey+=e.y-this.y;}
-        });
-        inputs.push(Math.min(ec,8)/8);
-        inputs.push(ec? (Math.atan2(ey,ex)-this.angle)/Math.PI:0);
-
-        // 9-12: 自己状態
-        inputs.push(this.energy/100);
-        inputs.push(Math.min(this.x,canvas.width-this.x,this.y,canvas.height-this.y)/50);
-        inputs.push(this.speed/4);
-        inputs.push(Math.sin(this.angle));
-
-        // 13-14: 捕食直後減速フラグ
-        inputs.push(this.justHunted>0?1:0);
-        inputs.push(0);
-
-        // NN制御
-        if(this.energy>0 || this.type==='hunter'){
-            let [turn,accel]=this.brain.predict(inputs);
-            this.angle+=turn*0.25;
-            this.speed=(this.type==='prey'?3.7:3.5)*Math.abs(accel);
-            if(this.justHunted>0) this.speed*=0.3;
-        }
-
-        this.x+=Math.cos(this.angle)*this.speed;
-        this.y+=Math.sin(this.angle)*this.speed;
-
-        if(this.x<=0||this.x>=canvas.width) this.angle=Math.PI-this.angle;
-        if(this.y<=0||this.y>=canvas.height) this.angle=-this.angle;
-        this.x=Math.max(0,Math.min(canvas.width,this.x));
-        this.y=Math.max(0,Math.min(canvas.height,this.y));
-
-        ////////////////////////////////////////////////////////
-        // エネルギー計算（進化圧）
-        ////////////////////////////////////////////////////////
-        if(this.type==='prey'){
-            let loss=0.01 + this.speed*this.speed*0.01;
-
-            // 整列ボーナス
-            let align=0,ac=0;
-            friends.forEach(f=>{
-                let d=Math.hypot(f.x-this.x,f.y-this.y);
-                if(d<60){
-                    let da=Math.abs(Math.sin((f.angle-this.angle)/2));
-                    align+=1-da; ac++;
-                }
-            });
-            if(ac>0) loss*= (1 - Math.min(0.4, align/ac*0.5));
-
-            // 分離ペナルティ
-            let close=0;
-            friends.forEach(f=>{
-                let d=Math.hypot(f.x-this.x,f.y-this.y);
-                if(d<10) close++;
-            });
-            loss += close*0.05;
-
-            this.energy-=loss;
-            this.checkEatMeat();
-        }else{
-            const hunterCount = creatures.filter(c=>c.type==='hunter').length;
-            const isLastHunter = (hunterCount <= 1);
-
-            if(!isLastHunter){
-                let loss=0.05+this.speed*this.speed*0.01;
-                this.energy-=loss;
-            }else{
-                // 最後のハンターは無敵
-                this.energy = Math.max(this.energy, 50); // 下限固定（視覚用）
-            }
-            this.checkHunt();
-        }
-
-        if(this.justHunted>0) this.justHunted--;
-
-        // ★ 生存判定：最後のHUNTERは絶対に死なない
-        if(this.type==='hunter'){
-            const hunterCount = creatures.filter(c=>c.type==='hunter').length;
-            if(hunterCount <= 1) return true;
-        }
-        return this.energy>0;
-    }
-
-    checkHunt(){
-        for(let i=creatures.length-1;i>=0;i--){
-            let c=creatures[i];
-            if(c.type==='prey'&&Math.hypot(this.x-c.x,this.y-c.y)<10){
-                creatures.splice(i,1);
-                this.energy=100;
-                this.justHunted=30;
-                this.reproduce(90);
-                break;
-            }
-        }
-    }
-
-    checkEatMeat(){
-        for(let i=meats.length-1;i>=0;i--){
-            let m=meats[i];
-            if(Math.hypot(this.x-m.x,this.y-m.y)<10){
-                meats.splice(i,1);
-                this.energy=100;
-                this.reproduce(95);
-                break;
-            }
-        }
-    }
-
-    reproduce(babyEnergy){
-        const baby=new Creature(this.x,this.y,this.type,new Brain({w1:Array.from(this.brain.w1),w2:Array.from(this.brain.w2)}));
-        baby.energy=babyEnergy;
-        creatures.push(baby);
-    }
-
-    draw(){
-        ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.angle);
-        ctx.fillStyle=this.type==='prey'?"#fff":"#f44";
-        ctx.beginPath();
-        if(this.type==='prey') ctx.arc(0,0,1.5,0,Math.PI*2);
-        else{ctx.moveTo(4,0);ctx.lineTo(-3,-2);ctx.lineTo(-3,2);ctx.closePath();}
-        ctx.fill(); ctx.restore();
-    }
-}
-
-////////////////////////////////////////////////////////////
-// Save / Load
-////////////////////////////////////////////////////////////
-function saveBrain(type){
-    const list=creatures.filter(c=>c.type===type);
-    if(!list.length)return;
-    const t=list[Math.floor(Math.random()*list.length)];
-    const data={type,w1:Array.from(t.brain.w1),w2:Array.from(t.brain.w2)};
-    const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
-    const a=document.createElement("a");
-    a.href=URL.createObjectURL(blob);
-    a.download=`brain_v6.1_${type}.json`;
-    a.click();
-}
-function triggerLoad(type){loadTarget=type; document.getElementById('fileInput').click();}
-function handleFileLoad(){
-    const f=document.getElementById('fileInput').files[0];
-    if(!f)return;
-    const r=new FileReader();
-    r.onload=e=>{
-        try{
-            const d=JSON.parse(e.target.result);
-            creatures.filter(c=>c.type===loadTarget).forEach(c=>c.brain=new Brain(d));
-            document.getElementById('log').innerText="Brain Loaded.";
-        }catch{document.getElementById('log').innerText="Load Error.";}
-    };
-    r.readAsText(f);
-}
-
-////////////////////////////////////////////////////////////
-// Init & Loop
-////////////////////////////////////////////////////////////
-function init(){
-    canvas.width=window.innerWidth;
-    canvas.height=window.innerHeight;
-    creatures=[]; meats=[];
-    for(let i=0;i<250;i++) creatures.push(new Creature(Math.random()*canvas.width,Math.random()*canvas.height,'prey'));
-    for(let i=0;i<12;i++) creatures.push(new Creature(Math.random()*canvas.width,Math.random()*canvas.height,'hunter'));
-}
-function animate(){
-    ctx.fillStyle='rgba(5,5,5,0.4)';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-
-    for(let i=creatures.length-1;i>=0;i--){
-        if(!creatures[i].update()){
-            if(creatures[i].type==='hunter') meats.push({x:creatures[i].x,y:creatures[i].y});
-            creatures.splice(i,1);
-        }else creatures[i].draw();
-    }
-
-    meats.forEach(m=>{
-        ctx.fillStyle="#0fc";
-        ctx.beginPath(); ctx.arc(m.x,m.y,1.2,0,Math.PI*2); ctx.fill();
+    return nn;
+  }
+  act(x){
+    // tanh
+    const h = this.w1.map((row,i)=>{
+      let s=this.b1[i];
+      for(let j=0;j<5;j++) s+=row[j]*x[j];
+      return Math.tanh(s);
     });
-
-    document.getElementById('preyCnt').innerText=creatures.filter(c=>c.type==='prey').length;
-    document.getElementById('hunterCnt').innerText=creatures.filter(c=>c.type==='hunter').length;
-    document.getElementById('meatCnt').innerText=meats.length;
-
-    requestAnimationFrame(animate);
+    const o = this.w2.map((row,i)=>{
+      let s=this.b2[i];
+      for(let j=0;j<6;j++) s+=row[j]*h[j];
+      return Math.tanh(s);
+    });
+    return o; // [turn, accel]
+  }
+  toJSON(){ return {w1:this.w1,b1:this.b1,w2:this.w2,b2:this.b2}; }
+  static fromJSON(obj){ return new TinyNN(obj); }
 }
-window.addEventListener('resize',()=>{canvas.width=window.innerWidth; canvas.height=window.innerHeight;});
-init(); animate();
+
+// ==============================
+// Creature
+// ==============================
+let idCounter=0;
+class Creature{
+  constructor(type, x, y, brain){
+    this.id = idCounter++;
+    this.type = type; // 'prey' or 'hunter'
+    this.x=x; this.y=y;
+    this.v=rand(0.2,1.5);
+    this.a=rand(0,Math.PI*2);
+    this.energy = type==='prey'? 100 : 120;
+    this.brain = brain || new TinyNN();
+    this.justHunted = 0;
+    this.alive = true;
+  }
+
+  sense(others){
+    // Inputs:
+    // 0: nearest target distance (norm)
+    // 1: angle to target (sin)
+    // 2: local density (norm)
+    // 3: alignment (avg cos)
+    // 4: energy (norm)
+    let nearest = null, nd = Infinity, ang=0;
+    let cnt=0, alignSum=0;
+    for(const o of others){
+      if(o===this) continue;
+      const d = dist(this.x,this.y,o.x,o.y);
+      if(d<WORLD.vision){
+        cnt++;
+        const da = Math.cos(o.a-this.a);
+        alignSum += da;
+      }
+      if(this.type==='hunter' && o.type==='prey'){
+        if(d<nd){ nd=d; ang = Math.atan2(o.y-this.y,o.x-this.x)-this.a; nearest=o; }
+      }
+      if(this.type==='prey' && o.type==='hunter'){
+        if(d<nd){ nd=d; ang = Math.atan2(o.y-this.y,o.x-this.x)-this.a; nearest=o; }
+      }
+    }
+    const ndn = isFinite(nd)? clamp(nd/WORLD.vision,0,1):1;
+    const dens = clamp(cnt/10,0,1);
+    const align = cnt? clamp(alignSum/cnt, -1, 1):0;
+    return [1-ndn, Math.sin(ang), dens, align, clamp(this.energy/120,0,1)];
+  }
+
+  update(others){
+    // 草食：エネルギー0で停止（死なない）
+    const canMove = (this.type==='hunter') || (this.type==='prey' && this.energy>0);
+
+    if(canMove){
+      const [turn,accel] = this.brain.act(this.sense(others));
+      this.a += turn*0.3;
+      this.v = clamp(this.v + accel*0.15, 0, WORLD.maxSpeed);
+    }else{
+      // 停止
+      this.v = 0;
+    }
+
+    // 捕食直後の減速（結合の進化圧）
+    if(this.justHunted>0){
+      this.v *= WORLD.postHuntSlow;
+      this.justHunted--;
+    }
+
+    // 移動
+    this.x = wrap(this.x + Math.cos(this.a)*this.v, canvas.width/devicePixelRatio);
+    this.y = wrap(this.y + Math.sin(this.a)*this.v, canvas.height/devicePixelRatio);
+
+    // エネルギー消費
+    if(this.type==='prey'){
+      const drain = WORLD.preyBaseDrain + WORLD.preyMoveDrain * this.v;
+      this.energy = Math.max(0, this.energy - drain);
+
+      // 整列ボーナス（同方向だと省エネ）
+      let cnt=0, align=0;
+      for(const o of others){
+        if(o!==this && o.type==='prey'){
+          const d = dist(this.x,this.y,o.x,o.y);
+          if(d<WORLD.alignDist){
+            cnt++; align += Math.cos(o.a-this.a);
+          }
+        }
+      }
+      if(cnt){
+        const a = align/cnt;
+        if(a>0.5){
+          this.energy = Math.min(120, this.energy + WORLD.alignBonus);
+        }
+      }
+
+      // 分離（衝突ペナルティ）
+      for(const o of others){
+        if(o!==this && o.type==='prey'){
+          if(dist(this.x,this.y,o.x,o.y)<WORLD.sepDist){
+            this.energy = Math.max(0, this.energy - WORLD.collisionPenalty);
+          }
+        }
+      }
+    }else{
+      // hunter
+      const drain = WORLD.hunterBaseDrain + WORLD.hunterMoveDrain * this.v;
+      this.energy = Math.max(0, this.energy - drain);
+    }
+  }
+
+  tryHunt(others){
+    if(this.type!=='hunter') return;
+    for(let i=others.length-1;i>=0;i--){
+      const o = others[i];
+      if(o.type==='prey'){
+        if(dist(this.x,this.y,o.x,o.y)<WORLD.huntRadius){
+          // 捕食：草食はこの時のみ除去
+          others.splice(i,1);
+          this.energy = Math.min(120, this.energy + 40);
+          this.justHunted = 30;
+
+          // 繁殖
+          if(this.energy>WORLD.reproduceThreshold){
+            this.energy *= 0.6;
+            const child = new Creature('hunter', this.x+rand(-5,5), this.y+rand(-5,5), this.brain.clone(true));
+            others.push(child);
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  // 生存判定
+  survives(others){
+    if(this.type==='prey'){
+      // 草食は死なない（停止するだけ）
+      return true;
+    }
+    if(this.type==='hunter'){
+      // 最後の1体は無敵
+      const hunters = others.filter(c=>c.type==='hunter').length;
+      if(hunters<=1) return true;
+      return this.energy>0;
+    }
+    return true;
+  }
+
+  draw(){
+    ctx.save();
+    ctx.translate(this.x,this.y);
+    ctx.rotate(this.a);
+    if(this.type==='prey'){
+      const stopped = this.energy<=0;
+      ctx.fillStyle = stopped? '#8aa1ff' : '#b8d2ff';
+      ctx.beginPath();
+      ctx.moveTo(8,0); ctx.lineTo(-6,4); ctx.lineTo(-6,-4); ctx.closePath();
+      ctx.fill();
+    }else{
+      ctx.fillStyle = '#ff6b6b';
+      ctx.beginPath();
+      ctx.moveTo(10,0); ctx.lineTo(-8,5); ctx.lineTo(-8,-5); ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// ==============================
+// World
+// ==============================
+let creatures=[];
+function resetWorld(loadedBrains=null){
+  creatures=[];
+  idCounter=0;
+  // Prey
+  for(let i=0;i<WORLD.preyCount;i++){
+    const b = loadedBrains?.prey?.[i%loadedBrains.prey.length];
+    creatures.push(new Creature('prey', rand(0,canvas.width/devicePixelRatio), rand(0,canvas.height/devicePixelRatio), b? TinyNN.fromJSON(b): null));
+  }
+  // Hunter
+  for(let i=0;i<WORLD.hunterCount;i++){
+    const b = loadedBrains?.hunter?.[i%loadedBrains.hunter.length];
+    creatures.push(new Creature('hunter', rand(0,canvas.width/devicePixelRatio), rand(0,canvas.height/devicePixelRatio), b? TinyNN.fromJSON(b): null));
+  }
+}
+resetWorld();
+
+// ==============================
+// Save / Load
+// ==============================
+document.getElementById('save').onclick=()=>{
+  const preyBrains = creatures.filter(c=>c.type==='prey').map(c=>c.brain.toJSON());
+  const hunterBrains = creatures.filter(c=>c.type==='hunter').map(c=>c.brain.toJSON());
+  const blob = new Blob([JSON.stringify({prey:preyBrains, hunter:hunterBrains},null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='medaka_v6_2_brains.json';
+  a.click();
+};
+document.getElementById('loadFile').onchange=(e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    const data=JSON.parse(r.result);
+    resetWorld(data);
+  };
+  r.readAsText(f);
+};
+document.getElementById('reset').onclick=()=>resetWorld();
+
+// ==============================
+// Analytics
+// ==============================
+let lastT=performance.now(), fps=0, hunts=0;
+function analytics(){
+  const prey = creatures.filter(c=>c.type==='prey');
+  const hunter = creatures.filter(c=>c.type==='hunter');
+  // 平均整列度（草食）
+  let align=0, cnt=0;
+  for(const p of prey){
+    let s=0, n=0;
+    for(const o of prey){
+      if(o!==p && dist(p.x,p.y,o.x,o.y)<WORLD.alignDist){
+        s+=Math.cos(o.a-p.a); n++;
+      }
+    }
+    if(n){ align+=s/n; cnt++; }
+  }
+  const avgAlign = cnt? (align/cnt).toFixed(2):'0.00';
+  document.getElementById('stats').textContent =
+`FPS: ${fps.toFixed(1)}
+Prey: ${prey.length}
+Hunter: ${hunter.length}
+Avg Align (Prey): ${avgAlign}
+Hunts: ${hunts}`;
+}
+
+// ==============================
+// Loop
+// ==============================
+function loop(t){
+  const dt=t-lastT; lastT=t; fps = lerp(fps, 1000/dt, 0.1);
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Update
+  for(const c of creatures) c.update(creatures);
+  // Hunt
+  for(const c of creatures){
+    const before = creatures.length;
+    c.tryHunt(creatures);
+    if(creatures.length<before) hunts++;
+  }
+  // Survival
+  creatures = creatures.filter(c=>c.survives(creatures));
+
+  // Draw
+  for(const c of creatures) c.draw();
+
+  analytics();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
