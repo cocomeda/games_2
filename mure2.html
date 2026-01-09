@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Eco-Evolution v6.0 - Flocking via Selection (Analysis)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+    body { margin:0; background:#050505; overflow:hidden; color:#0f0; font-family:'Consolas',monospace; }
+    canvas { display:block; }
+    .ui { 
+        position:absolute; top:15px; left:15px; 
+        background:rgba(0,0,0,0.45); padding:14px; border-radius:8px; 
+        border:1px solid rgba(0,255,204,0.25); min-width:300px; z-index:100;
+        pointer-events:none;
+    }
+    .row { display:flex; justify-content:space-between; }
+    .white{color:#fff}.red{color:#ff4444}.cyan{color:#00ffcc}.dim{color:#aaa}
+    hr{border:0;border-top:1px solid rgba(255,255,255,0.15);margin:8px 0}
+    .mini{font-size:11px}
+</style>
+</head>
+<body>
+<div class="ui">
+    <b>ECO-EVOLUTION v6.0</b> <span class="dim">Flocking via Selection</span>
+    <hr>
+    <div class="row">
+        <span class="white">PREY: <span id="preyCnt">0</span></span>
+        <span class="red">HUNTER: <span id="huntCnt">0</span></span>
+    </div>
+    <div class="row">
+        <span class="cyan">MEAT: <span id="meatCnt">0</span></span>
+        <span class="dim">t: <span id="timeCnt">0</span></span>
+    </div>
+    <hr>
+    <div class="mini">
+        <div><b>ANALYTICS (Prey)</b></div>
+        <div class="row"><span>Mean Density</span><span id="statDensity">0.00</span></div>
+        <div class="row"><span>Alignment</span><span id="statAlign">0.00</span></div>
+        <div class="row"><span>Collision Rate</span><span id="statCollide">0.00</span></div>
+        <div class="row"><span>Predation Rate</span><span id="statPred">0.00</span></div>
+    </div>
+    <hr>
+    <div class="mini dim">
+        Separation: collision penalty<br>
+        Alignment: energy bonus when co-moving<br>
+        Cohesion: predator slows after capture
+    </div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+/* =========================
+   World & Globals
+========================= */
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let creatures = [];
+let meats = [];
+let frame = 0;
+
+// --- Analytics accumulators (rolling) ---
+let A_density = 0, A_align = 0, A_collide = 0, A_pred = 0;
+let A_samples = 0;
+let A_predEvents = 0;
+let A_collisions = 0;
+
+/* =========================
+   Brain (simple NN)
+========================= */
+class Brain {
+    constructor(weights=null) {
+        this.inputSize = 14;     // base sensors + analysis sensors
+        this.hiddenSize = 18;
+        if (weights) {
+            // mutation only (evolution-only)
+            this.w1 = new Float32Array(weights.w1).map(v => Math.random()<0.12 ? v + (Math.random()-0.5)*0.3 : v);
+            this.w2 = new Float32Array(weights.w2).map(v => Math.random()<0.12 ? v + (Math.random()-0.5)*0.3 : v);
+        } else {
+            this.w1 = Float32Array.from({length: this.inputSize*this.hiddenSize}, ()=>Math.random()*2-1);
+            this.w2 = Float32Array.from({length: this.hiddenSize*2}, ()=>Math.random()*2-1);
+        }
+    }
+    predict(inputs) {
+        let h = new Float32Array(this.hiddenSize);
+        for (let i=0;i<this.hiddenSize;i++){
+            let s=0;
+            for (let j=0;j<this.inputSize;j++) s += inputs[j]*this.w1[i*this.inputSize+j];
+            h[i]=Math.tanh(s);
+        }
+        let out=[0,0];
+        for (let i=0;i<2;i++){
+            let s=0;
+            for (let j=0;j<this.hiddenSize;j++) s += h[j]*this.w2[i*this.hiddenSize+j];
+            out[i]=Math.tanh(s);
+        }
+        return out;
+    }
+}
+
+/* =========================
+   Creature
+========================= */
+class Creature {
+    constructor(x,y,type,brain=null){
+        this.x=x; this.y=y; this.type=type;
+        this.energy=100; this.angle=Math.random()*Math.PI*2;
+        this.brain = (brain instanceof Brain)?brain:new Brain(brain);
+        this.speed=0; this.stun=0; this.age=0;
+    }
+    normalizeDist(d){ return 1/(1+d/150); }
+
+    update(){
+        this.age++;
+        let inputs=[];
+        const enemies = creatures.filter(c=>c.type!==this.type);
+        const friends = creatures.filter(c=>c.type===this.type && c!==this);
+
+        // 1-2 nearest enemy (distance, bearing)
+        let nearestE=null, minDE=1e9;
+        for (let e of enemies){
+            let d=Math.hypot(this.x-e.x,this.y-e.y);
+            if (d<minDE){minDE=d; nearestE=e;}
+        }
+        inputs.push(this.normalizeDist(minDE), nearestE ? (Math.atan2(nearestE.y-this.y,nearestE.x-this.x)-this.angle)/Math.PI : 0);
+
+        // 3-4 friends centroid (count, bearing)
+        let fdx=0,fdy=0,fc=0;
+        for (let f of friends){
+            let d=Math.hypot(f.x-this.x,f.y-this.y);
+            if (d<150){fc++; fdx+=(f.x-this.x); fdy+=(f.y-this.y);}
+        }
+        inputs.push(Math.min(fc,10)/10, fc>0 ? (Math.atan2(fdy,fdx)-this.angle)/Math.PI : 0);
+
+        // 5-6 enemies centroid
+        let edx=0,edy=0,ec=0;
+        for (let e of enemies){
+            let d=Math.hypot(e.x-this.x,e.y-this.y);
+            if (d<150){ec++; edx+=(e.x-this.x); edy+=(e.y-this.y);}
+        }
+        inputs.push(Math.min(ec,10)/10, ec>0 ? (Math.atan2(edy,edx)-this.angle)/Math.PI : 0);
+
+        // 7-10 self state
+        inputs.push(this.energy/100, Math.min(this.x,canvas.width-this.x,this.y,canvas.height-this.y)/50);
+        inputs.push(this.speed/5, Math.sin(this.angle));
+
+        // 11-12 meat sensors (prey only)
+        if (this.type==='prey'){
+            let nearestM=null, minDM=1e9;
+            for (let m of meats){
+                let d=Math.hypot(this.x-m.x,this.y-m.y);
+                if (d<minDM){minDM=d; nearestM=m;}
+            }
+            inputs.push(this.normalizeDist(minDM), nearestM ? (Math.atan2(nearestM.y-this.y,nearestM.x-this.x)-this.angle)/Math.PI : 0);
+        } else {
+            inputs.push(0,0);
+        }
+
+        // 13-14 analysis sensors (do NOT impose rules)
+        // friend density (local) and alignment direction (average heading)
+        let aliX=0, aliY=0, n=0;
+        for (let f of friends){
+            let d=Math.hypot(f.x-this.x,f.y-this.y);
+            if (d<80){ aliX+=Math.cos(f.angle); aliY+=Math.sin(f.angle); n++; }
+        }
+        let alignDir = n>0 ? (Math.atan2(aliY,aliX)-this.angle)/Math.PI : 0;
+        inputs.push(Math.min(n,10)/10, alignDir);
+
+        // --- Act ---
+        if (this.energy>0){
+            let [turn,accel]=this.brain.predict(inputs);
+            this.angle += turn*0.25;
+
+            let speedMult=1.0;
+            if (this.stun>0){ speedMult*=0.3; this.stun--; }
+
+            this.speed = (this.type==='prey'?0.5:3.4) * Math.abs(accel) * speedMult;
+        }
+
+        // move
+        this.x += Math.cos(this.angle)*this.speed;
+        this.y += Math.sin(this.angle)*this.speed;
+
+        // walls
+        if (this.x<=0||this.x>=canvas.width) this.angle=Math.PI-this.angle;
+        if (this.y<=0||this.y>=canvas.height) this.angle=-this.angle;
+        this.x=Math.max(0,Math.min(canvas.width,this.x));
+        this.y=Math.max(0,Math.min(canvas.height,this.y));
+
+        // --- Energetics & Selection Pressures ---
+        if (this.type==='hunter'){
+            // base cost
+            const loss = 0.05 + (this.speed**2)*0.01;
+            this.energy -= loss;
+            this.checkHunt();
+        } else {
+            // (1) Separation: collision penalty
+            let close=0;
+            for (let f of friends){
+                let d=Math.hypot(f.x-this.x,f.y-this.y);
+                if (d<8) close++;
+            }
+            let collisionPenalty = close*0.02;
+            if (close>0) A_collisions++;
+
+            // (2) Alignment: energy bonus when co-moving
+            let alignBonus=0;
+            if (n>0){
+                let avgAng=Math.atan2(aliY,aliX);
+                let diff=Math.abs(avgAng-this.angle);
+                diff=Math.min(diff,Math.PI*2-diff);
+                alignBonus = (1 - diff/Math.PI) * 0.006;
+            }
+
+            // base hunger with bonus & penalty
+            let hunger = Math.max(0, 0.008 - alignBonus) + collisionPenalty;
+            this.energy -= hunger;
+
+            this.checkEatMeat();
+        }
+
+        return (this.type==='prey' || this.energy>0);
+    }
+
+    checkHunt(){
+        if (this.energy>90) return;
+
+        // nearest target
+        let nearest=null, minD=1e9, idx=-1;
+        for (let i=0;i<creatures.length;i++){
+            let c=creatures[i];
+            if (c.type==='prey'){
+                let d=Math.hypot(this.x-c.x,this.y-c.y);
+                if (d<minD){minD=d; nearest=c; idx=i;}
+            }
+        }
+        if (nearest && minD<10){
+            // capture
+            creatures.splice(idx,1);
+            this.energy=100;
+            this.reproduce(90);
+
+            // (3) Cohesion pressure: post-capture slowdown
+            this.stun = 60;
+
+            A_predEvents++;
+        }
+    }
+
+    checkEatMeat(){
+        for (let i=meats.length-1;i>=0;i--){
+            let m=meats[i];
+            if (Math.hypot(this.x-m.x,this.y-m.y)<10){
+                meats.splice(i,1);
+                this.energy=100;
+                this.reproduce(95);
+                break;
+            }
+        }
+    }
+
+    reproduce(babyEnergy){
+        const baby = new Creature(this.x,this.y,this.type,new Brain({w1:Array.from(this.brain.w1), w2:Array.from(this.brain.w2)}));
+        baby.energy=babyEnergy;
+        creatures.push(baby);
+    }
+
+    draw(){
+        ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.angle);
+        ctx.fillStyle = this.type==='prey' ? "#fff" : "#f44";
+        ctx.beginPath();
+        if (this.type==='prey') ctx.arc(0,0,1.5,0,Math.PI*2);
+        else { ctx.moveTo(4,0); ctx.lineTo(-3,-2); ctx.lineTo(-3,2); ctx.closePath(); }
+        ctx.fill(); ctx.restore();
+    }
+}
+
+/* =========================
+   Init & Loop
+========================= */
+function init(){
+    canvas.width=window.innerWidth; canvas.height=window.innerHeight;
+    creatures=[]; meats=[]; frame=0;
+    A_density=A_align=A_collide=A_pred=0; A_samples=0; A_predEvents=0; A_collisions=0;
+
+    for (let i=0;i<250;i++) creatures.push(new Creature(Math.random()*canvas.width,Math.random()*canvas.height,'prey'));
+    for (let i=0;i<12;i++) creatures.push(new Creature(Math.random()*canvas.width,Math.random()*canvas.height,'hunter'));
+}
+
+function animate(){
+    frame++;
+    ctx.fillStyle='rgba(5,5,5,0.5)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // --- Rebirth if prey collapses (keep ecology alive)
+    let prey = creatures.filter(c=>c.type==='prey');
+    if (prey.length<=15 && meats.length>0){
+        while (meats.length>0){
+            let m=meats.pop();
+            const parent = prey[Math.floor(Math.random()*prey.length)];
+            creatures.push(new Creature(m.x,m.y,'prey', parent?new Brain(parent.brain):null));
+        }
+    }
+
+    // --- Update
+    for (let i=creatures.length-1;i>=0;i--){
+        if (!creatures[i].update()){
+            if (creatures[i].type==='hunter') meats.push({x:creatures[i].x,y:creatures[i].y});
+            creatures.splice(i,1);
+        } else creatures[i].draw();
+    }
+
+    // draw meats
+    for (let m of meats){
+        ctx.fillStyle="#0fc"; ctx.beginPath(); ctx.arc(m.x,m.y,1.2,0,Math.PI*2); ctx.fill();
+    }
+
+    // --- Analytics (per-frame sampling)
+    let preyList = creatures.filter(c=>c.type==='prey');
+    if (preyList.length>0){
+        // mean local density (within 80)
+        let sumD=0, sumA=0;
+        for (let c of preyList){
+            let cnt=0, aliX=0,aliY=0;
+            for (let f of preyList){
+                if (f!==c){
+                    let d=Math.hypot(f.x-c.x,f.y-c.y);
+                    if (d<80){ cnt++; aliX+=Math.cos(f.angle); aliY+=Math.sin(f.angle); }
+                }
+            }
+            sumD += Math.min(cnt,10)/10;
+            if (cnt>0){
+                let avgAng=Math.atan2(aliY,aliX);
+                let diff=Math.abs(avgAng-c.angle); diff=Math.min(diff,Math.PI*2-diff);
+                sumA += (1 - diff/Math.PI);
+            }
+        }
+        A_density += sumD/preyList.length;
+        A_align   += sumA/preyList.length;
+        A_collide += A_collisions>0 ? 1:0; // mark frame with collisions
+        A_pred    += A_predEvents>0 ? 1:0; // mark frame with predation
+        A_samples++;
+
+        A_collisions=0; A_predEvents=0;
+    }
+
+    // --- UI
+    document.getElementById('preyCnt').innerText = preyList.length;
+    document.getElementById('huntCnt').innerText = creatures.filter(c=>c.type==='hunter').length;
+    document.getElementById('meatCnt').innerText = meats.length;
+    document.getElementById('timeCnt').innerText = frame;
+
+    const sd = (A_samples>0)?(A_density/A_samples):0;
+    const sa = (A_samples>0)?(A_align/A_samples):0;
+    const sc = (A_samples>0)?(A_collide/A_samples):0;
+    const sp = (A_samples>0)?(A_pred/A_samples):0;
+
+    document.getElementById('statDensity').innerText = sd.toFixed(2);
+    document.getElementById('statAlign').innerText   = sa.toFixed(2);
+    document.getElementById('statCollide').innerText = sc.toFixed(2);
+    document.getElementById('statPred').innerText    = sp.toFixed(2);
+
+    requestAnimationFrame(animate);
+}
+
+window.addEventListener('resize', ()=>{ canvas.width=window.innerWidth; canvas.height=window.innerHeight; });
+init(); animate();
+</script>
+</body>
+</html>
