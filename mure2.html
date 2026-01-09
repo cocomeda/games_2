@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Eco-Evolution v6.1a - Persistent Prey</title>
+<title>Eco-Evolution v6.2 - 4 Layer Brain</title>
 <style>
 body { margin:0; background:#050505; overflow:hidden; color:#0f0; font-family:Consolas,monospace; }
 canvas { display:block; }
@@ -19,7 +19,7 @@ button { background:#222; color:#fff; border:1px solid #555; padding:5px; font-s
 </head>
 <body>
 <div class="ui">
-<b>ECO-EVOLUTION v6.1a</b><hr>
+<b>ECO-EVOLUTION v6.2 (4-Layers)</b><hr>
 <div>PREY: <span id="preyCnt">0</span>　HUNTER: <span id="hunterCnt">0</span></div>
 <div class="cyan">MEAT: <span id="meatCnt">0</span></div>
 <hr>
@@ -29,7 +29,7 @@ button { background:#222; color:#fff; border:1px solid #555; padding:5px; font-s
 <button onclick="triggerLoad('prey')">草食 読込</button>
 <button onclick="triggerLoad('hunter')">肉食 読込</button>
 </div>
-<div id="log">解析モード：草食はエネルギー0で速度30%</div>
+<div id="log">4層ニューラルネットワーク：深層学習モード</div>
 </div>
 <input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFileLoad()">
 <canvas id="canvas"></canvas>
@@ -40,39 +40,54 @@ const ctx = canvas.getContext('2d');
 let creatures=[], meats=[], loadTarget='prey';
 
 ////////////////////////////////////////////////////////////
-// Neural Network
+// Neural Network (4 Layers: Input -> Hidden1 -> Hidden2 -> Output)
 ////////////////////////////////////////////////////////////
 class Brain {
     constructor(weights=null){
-        this.inputSize=14;
-        this.hiddenSize=18;
+        this.inputSize = 14;
+        this.h1Size = 15; // 第1隠れ層
+        this.h2Size = 12; // 第2隠れ層
+        this.outputSize = 2;
+
         if(weights){
-            this.w1=new Float32Array(weights.w1).map(v=>Math.random()<0.10? v+(Math.random()-0.5)*0.25:v);
-            this.w2=new Float32Array(weights.w2).map(v=>Math.random()<0.10? v+(Math.random()-0.5)*0.25:v);
+            this.w1 = new Float32Array(weights.w1).map(v=>Math.random()<0.10? v+(Math.random()-0.5)*0.25:v);
+            this.w2 = new Float32Array(weights.w2).map(v=>Math.random()<0.10? v+(Math.random()-0.5)*0.25:v);
+            this.w3 = new Float32Array(weights.w3).map(v=>Math.random()<0.10? v+(Math.random()-0.5)*0.25:v);
         }else{
-            this.w1=Float32Array.from({length:this.inputSize*this.hiddenSize},()=>Math.random()*2-1);
-            this.w2=Float32Array.from({length:this.hiddenSize*2},()=>Math.random()*2-1);
+            this.w1 = Float32Array.from({length:this.inputSize * this.h1Size}, () => Math.random()*2-1);
+            this.w2 = Float32Array.from({length:this.h1Size * this.h2Size}, () => Math.random()*2-1);
+            this.w3 = Float32Array.from({length:this.h2Size * this.outputSize}, () => Math.random()*2-1);
         }
     }
+
     predict(inputs){
-        let h=new Float32Array(this.hiddenSize);
-        for(let i=0;i<this.hiddenSize;i++){
+        // Layer 1 -> 2
+        let h1 = new Float32Array(this.h1Size);
+        for(let i=0; i<this.h1Size; i++){
             let sum=0;
-            for(let j=0;j<this.inputSize;j++) sum+=inputs[j]*this.w1[i*this.inputSize+j];
-            h[i]=Math.tanh(sum);
+            for(let j=0; j<this.inputSize; j++) sum += inputs[j] * this.w1[i*this.inputSize+j];
+            h1[i] = Math.tanh(sum);
         }
-        let out=[0,0];
-        for(let i=0;i<2;i++){
+        // Layer 2 -> 3
+        let h2 = new Float32Array(this.h2Size);
+        for(let i=0; i<this.h2Size; i++){
             let sum=0;
-            for(let j=0;j<this.hiddenSize;j++) sum+=h[j]*this.w2[i*this.hiddenSize+j];
-            out[i]=Math.tanh(sum);
+            for(let j=0; j<this.h1Size; j++) sum += h1[j] * this.w2[i*this.h1Size+j];
+            h2[i] = Math.tanh(sum);
+        }
+        // Layer 3 -> Output
+        let out = [0,0];
+        for(let i=0; i<this.outputSize; i++){
+            let sum=0;
+            for(let j=0; j<this.h2Size; j++) sum += h2[j] * this.w3[i*this.h2Size+j];
+            out[i] = Math.tanh(sum);
         }
         return out;
     }
 }
 
 ////////////////////////////////////////////////////////////
-// Creature
+// Creature (修正された挙動を維持)
 ////////////////////////////////////////////////////////////
 class Creature{
     constructor(x,y,type,brain=null){
@@ -127,12 +142,10 @@ class Creature{
         inputs.push(this.justHunted>0?1:0);
         inputs.push(0);
 
-        // ロジック更新箇所
         if(this.type==='prey'){
             let [turn,accel]=this.brain.predict(inputs);
             this.angle+=turn*0.25;
             let targetSpeed=3.0*Math.abs(accel);
-            // エネルギー0以下なら速度30%に制限
             this.speed = (this.energy > 0) ? targetSpeed : targetSpeed * 0.3;
         }else{
             let [turn,accel]=this.brain.predict(inputs);
@@ -170,8 +183,7 @@ class Creature{
             this.checkEatMeat();
         }else{
             const hunterCount = creatures.filter(c=>c.type==='hunter').length;
-            const isLastHunter = (hunterCount <= 1);
-            if(!isLastHunter){
+            if(hunterCount > 1){
                 let loss=0.05+this.speed*this.speed*0.01;
                 this.energy-=loss;
             }else{
@@ -181,7 +193,6 @@ class Creature{
         }
 
         if(this.justHunted>0) this.justHunted--;
-
         if(this.type==='prey') return true;
         if(this.type==='hunter'){
             const hunterCount = creatures.filter(c=>c.type==='hunter').length;
@@ -216,7 +227,11 @@ class Creature{
     }
 
     reproduce(babyEnergy){
-        const baby=new Creature(this.x,this.y,this.type,new Brain({w1:Array.from(this.brain.w1),w2:Array.from(this.brain.w2)}));
+        const baby=new Creature(this.x,this.y,this.type,new Brain({
+            w1:Array.from(this.brain.w1),
+            w2:Array.from(this.brain.w2),
+            w3:Array.from(this.brain.w3)
+        }));
         baby.energy=babyEnergy;
         creatures.push(baby);
     }
@@ -232,17 +247,22 @@ class Creature{
 }
 
 ////////////////////////////////////////////////////////////
-// Save / Load
+// Save / Load / Init / Loop
 ////////////////////////////////////////////////////////////
 function saveBrain(type){
     const list=creatures.filter(c=>c.type===type);
     if(!list.length)return;
     const t=list[Math.floor(Math.random()*list.length)];
-    const data={type,w1:Array.from(t.brain.w1),w2:Array.from(t.brain.w2)};
+    const data={
+        type,
+        w1:Array.from(t.brain.w1),
+        w2:Array.from(t.brain.w2),
+        w3:Array.from(t.brain.w3)
+    };
     const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
     const a=document.createElement("a");
     a.href=URL.createObjectURL(blob);
-    a.download=`brain_v6.1a_${type}.json`;
+    a.download=`brain_4layer_${type}.json`;
     a.click();
 }
 function triggerLoad(type){loadTarget=type; document.getElementById('fileInput').click();}
@@ -254,18 +274,14 @@ function handleFileLoad(){
         try{
             const d=JSON.parse(e.target.result);
             creatures.filter(c=>c.type===loadTarget).forEach(c=>c.brain=new Brain(d));
-            document.getElementById('log').innerText="Brain Loaded.";
+            document.getElementById('log').innerText="4-Layer Brain Loaded.";
         }catch{document.getElementById('log').innerText="Load Error.";}
     };
     r.readAsText(f);
 }
 
-////////////////////////////////////////////////////////////
-// Init & Loop
-////////////////////////////////////////////////////////////
 function init(){
-    canvas.width=window.innerWidth;
-    canvas.height=window.innerHeight;
+    canvas.width=window.innerWidth; canvas.height=window.innerHeight;
     creatures=[]; meats=[];
     for(let i=0;i<250;i++) creatures.push(new Creature(Math.random()*canvas.width,Math.random()*canvas.height,'prey'));
     for(let i=0;i<12;i++) creatures.push(new Creature(Math.random()*canvas.width,Math.random()*canvas.height,'hunter'));
@@ -282,14 +298,11 @@ function animate(){
         }else creatures[i].draw();
     }
 
-    // 草食個体が15以下になったら、肉を草食として復活させるロジックを維持
     const preyList = creatures.filter(c => c.type === 'prey');
     if (preyList.length <= 15 && meats.length > 0) {
-        meats.forEach(m => {
-            creatures.push(new Creature(m.x, m.y, 'prey'));
-        });
+        meats.forEach(m => { creatures.push(new Creature(m.x, m.y, 'prey')); });
         meats = [];
-        document.getElementById('log').innerText = "ALERT: Prey Respawned from Meat!";
+        document.getElementById('log').innerText = "ALERT: Prey Respawned!";
     }
 
     meats.forEach(m=>{
