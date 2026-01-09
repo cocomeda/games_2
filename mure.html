@@ -134,7 +134,7 @@ class Creature {
             let [turn, accel] = this.brain.predict(inputs);
             this.angle += turn * 0.25;
             let speedMult = (this.type === 'hunter' && this.energy > 80) ? 0.7 : 1.0;
-            this.speed = (this.type === 'prey' ? 2.5 : 3.4) * Math.abs(accel) * speedMult;
+            this.speed = (this.type === 'prey' ? 0.5 : 3.4) * Math.abs(accel) * speedMult;
         }
 
         this.x += Math.cos(this.angle) * this.speed;
