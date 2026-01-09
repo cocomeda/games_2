@@ -151,7 +151,7 @@ class Creature {
         }
 
         if (this.type === 'hunter') {
-            const loss = 0.04 + (this.speed ** 2) * 0.022;
+            const loss = 0.04 + (this.speed ** 2) * 0.015;
             const hList = creatures.filter(c => c.type === 'hunter');
             if (!(hList.length <= 1 && this.energy <= loss)) this.energy -= loss;
             this.checkHunt();
