@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Eco-Evolution v4.6 - True Last Survivor</title>
+    <title>Eco-Evolution v4.7 - Prey Food Sensor</title>
     <style>
         body { margin:0; background:#050505; overflow:hidden; color:#0f0; font-family:'Consolas',monospace; }
         canvas { display:block; }
@@ -25,7 +25,7 @@
 </head>
 <body>
     <div class="ui">
-        <b>ECO-EVOLUTION v4.6</b><hr>
+        <b>ECO-EVOLUTION v4.7</b><hr>
         <div style="display:flex; justify-content:space-between;">
             <span class="white">PREY: <span id="hCnt">0</span></span>
             <span class="red">HUNTER: <span id="pCnt">0</span></span>
@@ -41,7 +41,7 @@
                 <button onclick="triggerLoad('hunter')">肉食ロード</button>
             </div>
         </div>
-        <div id="log">Last survivor system active.</div>
+        <div id="log">Prey Food Sensor: ONLINE</div>
     </div>
     <input type="file" id="fileInput" accept=".json" onchange="handleFileLoad()">
     <canvas id="canvas"></canvas>
@@ -56,7 +56,7 @@ let loadTarget = 'prey';
 
 class Brain {
     constructor(weights = null) {
-        this.inputSize = 12;
+        this.inputSize = 12; // 12個のセンサー入力
         this.hiddenSize = 14; 
         if (weights && weights.w1.length === this.inputSize * this.hiddenSize) {
             this.w1 = new Float32Array(weights.w1).map(v => Math.random() < 0.08 ? v + (Math.random()-0.5)*0.2 : v);
@@ -96,14 +96,16 @@ class Creature {
         let inputs = [];
         let all = creatures;
         
+        // 1-2. 最も近い敵
         let enemies = all.filter(c => c.type !== this.type);
-        let nearest = null, minDist = 2000;
+        let nearestE = null, minDistE = 2000;
         for(let e of enemies) {
             let d = Math.hypot(this.x - e.x, this.y - e.y);
-            if(d < minDist) { minDist = d; nearest = e; }
+            if(d < minDistE) { minDistE = d; nearestE = e; }
         }
-        inputs.push(minDist / 800, nearest ? (Math.atan2(nearest.y - this.y, nearest.x - this.x) - this.angle) / Math.PI : 0);
+        inputs.push(minDistE / 800, nearestE ? (Math.atan2(nearestE.y - this.y, nearestE.x - this.x) - this.angle) / Math.PI : 0);
 
+        // 3-4. 仲間の群れ情報
         let friends = all.filter(c => c.type === this.type && c !== this);
         let fCount = 0, fAvgDx = 0, fAvgDy = 0;
         friends.forEach(f => {
@@ -112,6 +114,7 @@ class Creature {
         });
         inputs.push(Math.min(fCount, 10) / 10, fCount > 0 ? (Math.atan2(fAvgDy, fAvgDx) - this.angle) / Math.PI : 0);
 
+        // 5-6. 敵の群れ情報
         let eCount = 0, eAvgDx = 0, eAvgDy = 0;
         enemies.forEach(e => {
             let d = Math.hypot(e.x - this.x, e.y - this.y);
@@ -119,24 +122,38 @@ class Creature {
         });
         inputs.push(Math.min(eCount, 10) / 10, eCount > 0 ? (Math.atan2(eAvgDy, eAvgDx) - this.angle) / Math.PI : 0);
 
+        // 7-10. 自己状態と環境
         inputs.push(this.energy / 100, Math.min(this.x, canvas.width-this.x, this.y, canvas.height-this.y) / 50);
-        inputs.push(this.speed / 5, Math.sin(this.angle), 0, 0);
+        inputs.push(this.speed / 5, Math.sin(this.angle));
 
+        // 11-12. 餌センサー (Prey用) / ハンターは予備
+        if (this.type === 'prey') {
+            let nearestM = null, minDistM = 2000;
+            for (let m of meats) {
+                let d = Math.hypot(this.x - m.x, this.y - m.y);
+                if (d < minDistM) { minDistM = d; nearestM = m; }
+            }
+            inputs.push(minDistM / 800, nearestM ? (Math.atan2(nearestM.y - this.y, nearestM.x - this.x) - this.angle) / Math.PI : 0);
+        } else {
+            inputs.push(0, 0);
+        }
+
+        // 行動決定
         if (this.energy > 0) {
             let [turn, accel] = this.brain.predict(inputs);
             this.angle += turn * 0.2;
             let speedMult = (this.type === 'hunter' && this.energy > 60) ? Math.max(0.5, 1.0 - ((this.energy - 60) / 40) * 0.5) : 1.0;
-            this.speed = (this.type === 'prey' ? 2.5 : 3.2) * Math.abs(accel) * speedMult;
+            this.speed = (this.type === 'prey' ? 3.0 : 3.2) * Math.abs(accel) * speedMult;
         } else { this.speed = 0; }
 
         this.x += Math.cos(this.angle) * this.speed;
         this.y += Math.sin(this.angle) * this.speed;
 
-        // --- 不死判定用のフラグ ---
+        // --- 最後の一匹保護ロジック ---
         const hList = creatures.filter(c => c.type === 'hunter');
         const isLastHunter = (this.type === 'hunter' && hList.length <= 1);
 
-        // --- 壁反射とダメージ判定 ---
+        // 壁反射
         let hitWall = false;
         if(this.x <= 0 || this.x >= canvas.width) { this.angle = Math.PI - this.angle; hitWall = true; }
         if(this.y <= 0 || this.y >= canvas.height) { this.angle = -this.angle; hitWall = true; }
@@ -144,19 +161,13 @@ class Creature {
         if(hitWall) {
             this.x = Math.max(0, Math.min(canvas.width, this.x));
             this.y = Math.max(0, Math.min(canvas.height, this.y));
-            // 最後の一匹かつ低エネルギーなら壁ダメージを無効化
-            if (!(isLastHunter && this.energy <= 2.0)) {
-                this.energy -= 0; 
-            }
+            if (!(isLastHunter && this.energy <= 2.0)) this.energy -= 1.0; 
         }
 
-        // --- エネルギー代謝 ---
+        // 代謝
         if (this.type === 'hunter') {
             const loss = 0.04 + (this.speed ** 2) * 0.015;
-            // 最後の一匹かつ低エネルギーなら基礎代謝を無効化
-            if (!(isLastHunter && this.energy <= loss + 0.1)) {
-                this.energy -= loss;
-            }
+            if (!(isLastHunter && this.energy <= loss + 0.1)) this.energy -= loss;
             this.checkHunt();
         } else {
             this.energy -= 0.005;
@@ -172,7 +183,7 @@ class Creature {
             if (c.type === 'prey' && Math.hypot(this.x - c.x, this.y - c.y) < 8) {
                 creatures.splice(i, 1);
                 this.energy = 100;
-                this.reproduce(94); // 子は少しエネルギーを低くして同期をずらす
+                this.reproduce(94); 
                 break;
             }
         }
@@ -208,7 +219,7 @@ class Creature {
     }
 }
 
-// GUI関数
+// UI Functions
 function saveBrain(type) {
     const list = creatures.filter(c => c.type === type);
     if (list.length === 0) return;
@@ -217,9 +228,8 @@ function saveBrain(type) {
     const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `brain_v4.6_${type}.json`; a.click();
+    a.download = `brain_v4.7_${type}.json`; a.click();
 }
-
 function triggerLoad(type) { loadTarget = type; document.getElementById('fileInput').click(); }
 function handleFileLoad() {
     const file = document.getElementById('fileInput').files[0];
@@ -246,6 +256,14 @@ function animate() {
     ctx.fillStyle = 'rgba(5,5,5,0.4)'; ctx.fillRect(0,0,canvas.width, canvas.height);
     let pL = creatures.filter(c => c.type === 'prey');
     let hL = creatures.filter(c => c.type === 'hunter');
+
+    if (hL.length === 1 && hL[0].energy < 5) {
+        document.getElementById('log').innerText = "CRITICAL: Last Hunter in stasis";
+        document.getElementById('log').style.color = "#f44";
+    } else {
+        document.getElementById('log').innerText = "Prey Food Sensor: ONLINE";
+        document.getElementById('log').style.color = "#888";
+    }
 
     if (pL.length <= 10 && meats.length > 0) {
         let m = meats.pop();
