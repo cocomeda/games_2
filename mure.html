@@ -146,7 +146,7 @@ class Creature {
             this.y = Math.max(0, Math.min(canvas.height, this.y));
             // 最後の一匹かつ低エネルギーなら壁ダメージを無効化
             if (!(isLastHunter && this.energy <= 2.0)) {
-                this.energy -= 1.0; 
+                this.energy -= 0; 
             }
         }
 
