@@ -150,7 +150,7 @@ class Creature {
         
         if (this.type === 'hunter') {
             // ハンターの消費エネルギーを緩和 (学習しやすくするため)
-            const loss = 0.05 + (this.speed ** 2) * 0.01;
+            const loss = 0.05 + (this.speed ** 2) * 0.03;
             if (!(isLastHunter && this.energy <= loss + 0.1)) this.energy -= loss;
             this.checkHunt();
         } else {
