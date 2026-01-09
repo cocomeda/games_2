@@ -135,7 +135,7 @@ class Creature {
         const hList = creatures.filter(c => c.type === 'hunter');
         const isLastHunter = (this.type === 'hunter' && hList.length <= 1);
         if (this.type === 'hunter') {
-            const loss = 0.04 + (this.speed ** 2) * 0.022;
+            const loss = 0.1 + (this.speed ** 2) * 0.022;
             if (!(isLastHunter && this.energy <= loss + 0.1)) this.energy -= loss;
             this.checkHunt();
         } else { this.energy -= 0.005; this.checkEatMeat(); }
