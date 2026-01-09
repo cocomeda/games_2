@@ -49,7 +49,7 @@ const R_align = 80;
 const R_coh = 120;
 
 // ★ 個体数を小さく
-const MAX_PREY = 120;
+const MAX_PREY = 300;
 const MAX_HUNTER = 6;
 
 // ===== 脳 =====
@@ -183,7 +183,7 @@ class Creature {
 
         // エネルギー
         if(this.type==='prey'){
-            let loss=0.006 + this.speed*0.01;
+            let loss=0.006 + this.speed*0.02;
             if(sepCount>0) loss += 0.04*sepCount;
             if(alignN>1){
                 let bonus = Math.max(0,1-Math.abs(alignDiff));
