@@ -157,7 +157,7 @@ class Creature {
         }else{
             this.speed = 3.5 * Math.abs(accel);
             if(this.justHunted > 0){
-                this.speed *= 0.3;
+                this.speed *= 0.7;
                 this.justHunted--;
             }
         }
@@ -196,7 +196,7 @@ class Creature {
             if (c.type === 'prey' && Math.hypot(this.x - c.x, this.y - c.y) < 10) {
                 // 草食は消えず、肉食がエネルギー回復＋減速
                 this.energy = 100;
-                this.justHunted = 60;
+                this.justHunted = 30;
                 break;
             }
         }
