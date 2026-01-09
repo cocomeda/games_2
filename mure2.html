@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Eco-Evolution v6.0 - Flocking by Evolution</title>
+<title>Eco-Evolution v6.1 - Last Hunter Immortal</title>
 <style>
 body { margin:0; background:#050505; overflow:hidden; color:#0f0; font-family:Consolas,monospace; }
 canvas { display:block; }
@@ -19,7 +19,7 @@ button { background:#222; color:#fff; border:1px solid #555; padding:5px; font-s
 </head>
 <body>
 <div class="ui">
-<b>ECO-EVOLUTION v6.0</b><hr>
+<b>ECO-EVOLUTION v6.1</b><hr>
 <div>PREY: <span id="preyCnt">0</span>　HUNTER: <span id="hunterCnt">0</span></div>
 <div class="cyan">MEAT: <span id="meatCnt">0</span></div>
 <hr>
@@ -29,7 +29,7 @@ button { background:#222; color:#fff; border:1px solid #555; padding:5px; font-s
 <button onclick="triggerLoad('prey')">草食 読込</button>
 <button onclick="triggerLoad('hunter')">肉食 読込</button>
 </div>
-<div id="log">解析モード：群れは進化でのみ形成</div>
+<div id="log">解析モード：最後のHUNTERは無敵</div>
 </div>
 <input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFileLoad()">
 <canvas id="canvas"></canvas>
@@ -134,12 +134,12 @@ class Creature{
         inputs.push(this.justHunted>0?1:0);
         inputs.push(0);
 
-        // NN
-        if(this.energy>0){
+        // NN制御
+        if(this.energy>0 || this.type==='hunter'){
             let [turn,accel]=this.brain.predict(inputs);
             this.angle+=turn*0.25;
             this.speed=(this.type==='prey'?0.7:3.5)*Math.abs(accel);
-            if(this.justHunted>0) this.speed*=0.3; // 捕食直後の減速
+            if(this.justHunted>0) this.speed*=0.3;
         }
 
         this.x+=Math.cos(this.angle)*this.speed;
@@ -156,7 +156,7 @@ class Creature{
         if(this.type==='prey'){
             let loss=0.01 + this.speed*this.speed*0.01;
 
-            // 整列ボーナス：近傍と同方向
+            // 整列ボーナス
             let align=0,ac=0;
             friends.forEach(f=>{
                 let d=Math.hypot(f.x-this.x,f.y-this.y);
@@ -165,9 +165,9 @@ class Creature{
                     align+=1-da; ac++;
                 }
             });
-            if(ac>0) loss*= (1 - Math.min(0.4, align/ac*0.5)); // 最大40%省エネ
+            if(ac>0) loss*= (1 - Math.min(0.4, align/ac*0.5));
 
-            // 分離ペナルティ：衝突密度
+            // 分離ペナルティ
             let close=0;
             friends.forEach(f=>{
                 let d=Math.hypot(f.x-this.x,f.y-this.y);
@@ -178,12 +178,26 @@ class Creature{
             this.energy-=loss;
             this.checkEatMeat();
         }else{
-            let loss=0.05+this.speed*this.speed*0.01;
-            this.energy-=loss;
+            const hunterCount = creatures.filter(c=>c.type==='hunter').length;
+            const isLastHunter = (hunterCount <= 1);
+
+            if(!isLastHunter){
+                let loss=0.05+this.speed*this.speed*0.01;
+                this.energy-=loss;
+            }else{
+                // 最後のハンターは無敵
+                this.energy = Math.max(this.energy, 50); // 下限固定（視覚用）
+            }
             this.checkHunt();
         }
 
         if(this.justHunted>0) this.justHunted--;
+
+        // ★ 生存判定：最後のHUNTERは絶対に死なない
+        if(this.type==='hunter'){
+            const hunterCount = creatures.filter(c=>c.type==='hunter').length;
+            if(hunterCount <= 1) return true;
+        }
         return this.energy>0;
     }
 
@@ -239,7 +253,7 @@ function saveBrain(type){
     const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
     const a=document.createElement("a");
     a.href=URL.createObjectURL(blob);
-    a.download=`brain_v6_${type}.json`;
+    a.download=`brain_v6.1_${type}.json`;
     a.click();
 }
 function triggerLoad(type){loadTarget=type; document.getElementById('fileInput').click();}
