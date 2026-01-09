@@ -2,31 +2,30 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Eco-Evolution v4.4 - Wall Damage</title>
+    <title>Eco-Evolution v4.6 - True Last Survivor</title>
     <style>
         body { margin:0; background:#050505; overflow:hidden; color:#0f0; font-family:'Consolas',monospace; }
         canvas { display:block; }
         .ui { 
             position:absolute; top:15px; left:15px; 
-            background:rgba(0, 0, 0, 0.5); 
-            padding:15px; border-radius:8px; border:1px solid rgba(0, 255, 204, 0.3); 
+            background:rgba(0, 0, 0, 0.4); 
+            padding:15px; border-radius:8px; border:1px solid rgba(0, 255, 204, 0.2); 
             min-width:280px; pointer-events: none;
             z-index: 100;
         }
         .controls { pointer-events: auto; }
         .red { color: #ff4444; } .white { color: #ffffff; } .cyan { color: #00ffcc; }
-        hr { border:0; border-top:1px solid rgba(255,255,255,0.2); margin:10px 0; }
+        hr { border:0; border-top:1px solid rgba(255,255,255,0.1); margin:10px 0; }
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top:10px; }
-        button { background:rgba(50,50,50,0.8); color:#fff; border:1px solid #666; padding:5px; cursor:pointer; font-size:11px; }
-        button:hover { background:rgba(80,80,80,0.9); }
-        #log { font-size:11px; color:#aaa; height: 1.2em; margin-top:5px; }
-        input[type="file"] { display: none; }
-        .total-box { font-size: 14px; border: 1px solid rgba(0,255,0,0.5); padding: 5px; text-align: center; margin-top: 5px; }
+        button { background:rgba(40,40,40,0.7); color:#fff; border:1px solid #555; padding:5px; cursor:pointer; font-size:11px; }
+        button:hover { background:rgba(70,70,70,0.8); }
+        #log { font-size:11px; color:#888; height: 1.2em; margin-top:5px; }
+        .total-box { font-size: 14px; border: 1px solid rgba(0,255,0,0.3); padding: 5px; text-align: center; margin-top: 5px; }
     </style>
 </head>
 <body>
     <div class="ui">
-        <b>ECO-EVOLUTION v4.4</b><hr>
+        <b>ECO-EVOLUTION v4.6</b><hr>
         <div style="display:flex; justify-content:space-between;">
             <span class="white">PREY: <span id="hCnt">0</span></span>
             <span class="red">HUNTER: <span id="pCnt">0</span></span>
@@ -42,7 +41,7 @@
                 <button onclick="triggerLoad('hunter')">肉食ロード</button>
             </div>
         </div>
-        <div id="log">Wall collision damage active.</div>
+        <div id="log">Last survivor system active.</div>
     </div>
     <input type="file" id="fileInput" accept=".json" onchange="handleFileLoad()">
     <canvas id="canvas"></canvas>
@@ -121,8 +120,7 @@ class Creature {
         inputs.push(Math.min(eCount, 10) / 10, eCount > 0 ? (Math.atan2(eAvgDy, eAvgDx) - this.angle) / Math.PI : 0);
 
         inputs.push(this.energy / 100, Math.min(this.x, canvas.width-this.x, this.y, canvas.height-this.y) / 50);
-        inputs.push(this.speed / 5, Math.sin(this.angle));
-        inputs.push(0, 0);
+        inputs.push(this.speed / 5, Math.sin(this.angle), 0, 0);
 
         if (this.energy > 0) {
             let [turn, accel] = this.brain.predict(inputs);
@@ -134,26 +132,31 @@ class Creature {
         this.x += Math.cos(this.angle) * this.speed;
         this.y += Math.sin(this.angle) * this.speed;
 
+        // --- 不死判定用のフラグ ---
+        const hList = creatures.filter(c => c.type === 'hunter');
+        const isLastHunter = (this.type === 'hunter' && hList.length <= 1);
+
         // --- 壁反射とダメージ判定 ---
         let hitWall = false;
-        if(this.x <= 0 || this.x >= canvas.width) {
-            this.angle = Math.PI - this.angle;
-            hitWall = true;
-        }
-        if(this.y <= 0 || this.y >= canvas.height) {
-            this.angle = -this.angle;
-            hitWall = true;
-        }
+        if(this.x <= 0 || this.x >= canvas.width) { this.angle = Math.PI - this.angle; hitWall = true; }
+        if(this.y <= 0 || this.y >= canvas.height) { this.angle = -this.angle; hitWall = true; }
+        
         if(hitWall) {
-            this.energy -= 1.0; // 壁ダメージ
             this.x = Math.max(0, Math.min(canvas.width, this.x));
             this.y = Math.max(0, Math.min(canvas.height, this.y));
+            // 最後の一匹かつ低エネルギーなら壁ダメージを無効化
+            if (!(isLastHunter && this.energy <= 2.0)) {
+                this.energy -= 1.0; 
+            }
         }
 
+        // --- エネルギー代謝 ---
         if (this.type === 'hunter') {
             const loss = 0.04 + (this.speed ** 2) * 0.015;
-            const hList = creatures.filter(c => c.type === 'hunter');
-            if (!(hList.length <= 1 && this.energy <= loss)) this.energy -= loss;
+            // 最後の一匹かつ低エネルギーなら基礎代謝を無効化
+            if (!(isLastHunter && this.energy <= loss + 0.1)) {
+                this.energy -= loss;
+            }
             this.checkHunt();
         } else {
             this.energy -= 0.005;
@@ -169,7 +172,7 @@ class Creature {
             if (c.type === 'prey' && Math.hypot(this.x - c.x, this.y - c.y) < 8) {
                 creatures.splice(i, 1);
                 this.energy = 100;
-                this.reproduce();
+                this.reproduce(94); // 子は少しエネルギーを低くして同期をずらす
                 break;
             }
         }
@@ -181,17 +184,17 @@ class Creature {
             if (Math.hypot(this.x - m.x, this.y - m.y) < 8) {
                 meats.splice(i, 1);
                 this.energy = 100;
-                this.reproduce();
+                this.reproduce(98);
                 break;
             }
         }
     }
 
-    reproduce() {
+    reproduce(babyEnergy) {
         const baby = new Creature(this.x, this.y, this.type, new Brain({
             w1: Array.from(this.brain.w1), w2: Array.from(this.brain.w2)
         }));
-        baby.energy = 100;
+        baby.energy = babyEnergy;
         creatures.push(baby);
     }
 
@@ -205,6 +208,7 @@ class Creature {
     }
 }
 
+// GUI関数
 function saveBrain(type) {
     const list = creatures.filter(c => c.type === type);
     if (list.length === 0) return;
@@ -213,7 +217,7 @@ function saveBrain(type) {
     const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `brain_v4.4_${type}.json`; a.click();
+    a.download = `brain_v4.6_${type}.json`; a.click();
 }
 
 function triggerLoad(type) { loadTarget = type; document.getElementById('fileInput').click(); }
