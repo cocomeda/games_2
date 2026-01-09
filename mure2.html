@@ -2,175 +2,144 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Eco-Evolution v6.1 - Emergent Schooling (Analysis)</title>
+<title>Eco-Evolution v6.0 - Flocking by Evolution</title>
 <style>
-    body { margin:0; background:#050505; overflow:hidden; color:#0f0; font-family:Consolas, monospace; }
-    canvas { display:block; }
-    .ui {
-        position:absolute; top:15px; left:15px;
-        background:rgba(0,0,0,0.55); padding:12px; border-radius:8px;
-        border:1px solid rgba(0,255,204,0.3); min-width:300px;
-        z-index:10;
-    }
-    .controls button { font-size:11px; margin:2px; }
-    #log { font-size:11px; color:#aaa; height:2em; }
+body { margin:0; background:#050505; overflow:hidden; color:#0f0; font-family:Consolas,monospace; }
+canvas { display:block; }
+.ui {
+    position:absolute; top:15px; left:15px;
+    background:rgba(0,0,0,0.5); padding:12px; border-radius:8px;
+    border:1px solid rgba(0,255,200,0.2); min-width:300px; z-index:100;
+}
+button { background:#222; color:#fff; border:1px solid #555; padding:5px; font-size:11px; cursor:pointer; }
+.btns { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:8px; }
+#log { font-size:11px; color:#aaa; margin-top:6px; }
+.cyan{color:#0fc;} .red{color:#f55;} .white{color:#fff;}
 </style>
 </head>
 <body>
 <div class="ui">
-    <b>ECO-EVOLUTION v6.1</b><br>
-    <span>PREY: <span id="preyCnt">0</span></span>
-    <span style="color:#f44;">HUNTER: <span id="hunterCnt">0</span></span><br>
-    MEAT: <span id="meatCnt">0</span>
-    <hr>
-    <div class="controls">
-        <button onclick="saveBrain('prey')">草食保存</button>
-        <button onclick="saveBrain('hunter')">肉食保存</button><br>
-        <button onclick="triggerLoad('prey')">草食ロード</button>
-        <button onclick="triggerLoad('hunter')">肉食ロード</button>
-    </div>
-    <hr>
-    <div id="log">Analysis Mode: ON</div>
+<b>ECO-EVOLUTION v6.0</b><hr>
+<div>PREY: <span id="preyCnt">0</span>　HUNTER: <span id="hunterCnt">0</span></div>
+<div class="cyan">MEAT: <span id="meatCnt">0</span></div>
+<hr>
+<div class="btns">
+<button onclick="saveBrain('prey')">草食 保存</button>
+<button onclick="saveBrain('hunter')">肉食 保存</button>
+<button onclick="triggerLoad('prey')">草食 読込</button>
+<button onclick="triggerLoad('hunter')">肉食 読込</button>
 </div>
-
+<div id="log">解析モード：群れは進化でのみ形成</div>
+</div>
 <input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFileLoad()">
 <canvas id="canvas"></canvas>
 
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+let creatures=[], meats=[], loadTarget='prey';
 
-let creatures = [];
-let meats = [];
-let loadTarget = 'prey';
-
-const R_sep = 12;
-const R_align = 80;
-const R_coh = 120;
-
-// ★ 個体数を小さく
-const MAX_PREY = 300;
-const MAX_HUNTER = 6;
-
-// ===== 脳 =====
+////////////////////////////////////////////////////////////
+// Neural Network
+////////////////////////////////////////////////////////////
 class Brain {
-    constructor(weights = null) {
-        this.inputSize = 14;
-        this.hiddenSize = 18;
-        if (weights) {
-            this.w1 = new Float32Array(weights.w1).map(v => Math.random()<0.12 ? v+(Math.random()-0.5)*0.25 : v);
-            this.w2 = new Float32Array(weights.w2).map(v => Math.random()<0.12 ? v+(Math.random()-0.5)*0.25 : v);
-        } else {
-            this.w1 = Float32Array.from({length:this.inputSize*this.hiddenSize},()=>Math.random()*2-1);
-            this.w2 = Float32Array.from({length:this.hiddenSize*2},()=>Math.random()*2-1);
+    constructor(weights=null){
+        this.inputSize=14;
+        this.hiddenSize=18;
+        if(weights){
+            this.w1=new Float32Array(weights.w1).map(v=>Math.random()<0.12? v+(Math.random()-0.5)*0.25:v);
+            this.w2=new Float32Array(weights.w2).map(v=>Math.random()<0.12? v+(Math.random()-0.5)*0.25:v);
+        }else{
+            this.w1=Float32Array.from({length:this.inputSize*this.hiddenSize},()=>Math.random()*2-1);
+            this.w2=Float32Array.from({length:this.hiddenSize*2},()=>Math.random()*2-1);
         }
     }
     predict(inputs){
-        let h = new Float32Array(this.hiddenSize);
+        let h=new Float32Array(this.hiddenSize);
         for(let i=0;i<this.hiddenSize;i++){
-            let s=0;
-            for(let j=0;j<this.inputSize;j++) s+=inputs[j]*this.w1[i*this.inputSize+j];
-            h[i]=Math.tanh(s);
+            let sum=0;
+            for(let j=0;j<this.inputSize;j++) sum+=inputs[j]*this.w1[i*this.inputSize+j];
+            h[i]=Math.tanh(sum);
         }
-        let o=[0,0];
+        let out=[0,0];
         for(let i=0;i<2;i++){
-            let s=0;
-            for(let j=0;j<this.hiddenSize;j++) s+=h[j]*this.w2[i*this.hiddenSize+j];
-            o[i]=Math.tanh(s);
+            let sum=0;
+            for(let j=0;j<this.hiddenSize;j++) sum+=h[j]*this.w2[i*this.hiddenSize+j];
+            out[i]=Math.tanh(sum);
         }
-        return o;
+        return out;
     }
 }
 
-// ===== 個体 =====
-class Creature {
+////////////////////////////////////////////////////////////
+// Creature
+////////////////////////////////////////////////////////////
+class Creature{
     constructor(x,y,type,brain=null){
         this.x=x; this.y=y; this.type=type;
-        this.energy=100;
-        this.angle=Math.random()*Math.PI*2;
-        this.speed=0;
-        this.brain = (brain instanceof Brain)?brain:new Brain(brain);
-        this.cooldown=0;
+        this.energy=100; this.angle=Math.random()*Math.PI*2;
+        this.brain=(brain instanceof Brain)?brain:new Brain(brain);
+        this.speed=0; this.justHunted=0;
     }
-
-    norm(d){ return 1/(1+d/120); }
+    normDist(d){ return 1/(1+d/120); }
 
     update(){
         let inputs=[];
-        let friends = creatures.filter(c=>c.type===this.type && c!==this);
-        let enemies = creatures.filter(c=>c.type!==this.type);
+        let friends=creatures.filter(c=>c.type===this.type&&c!==this);
+        let enemies=creatures.filter(c=>c.type!==this.type);
 
-        // 敵
-        let nearestE=null, minDE=9999;
+        // 1-2: 最近傍の敵
+        let ne=null, dmin=9999;
         for(let e of enemies){
             let d=Math.hypot(this.x-e.x,this.y-e.y);
-            if(d<minDE){minDE=d; nearestE=e;}
+            if(d<dmin){dmin=d; ne=e;}
         }
-        inputs.push(this.norm(minDE));
-        inputs.push(nearestE?(Math.atan2(nearestE.y-this.y,nearestE.x-this.x)-this.angle)/Math.PI:0);
+        inputs.push(this.normDist(dmin));
+        inputs.push(ne? (Math.atan2(ne.y-this.y,ne.x-this.x)-this.angle)/Math.PI:0);
 
-        // 分離
-        let sepCount=0;
+        // 3-4: 味方の重心方向
+        let fx=0,fy=0,fc=0;
         friends.forEach(f=>{
-            let d=Math.hypot(this.x-f.x,this.y-f.y);
-            if(d<R_sep) sepCount++;
+            let d=Math.hypot(f.x-this.x,f.y-this.y);
+            if(d<120){fc++; fx+=f.x-this.x; fy+=f.y-this.y;}
         });
-        inputs.push(Math.min(sepCount,5)/5);
+        inputs.push(Math.min(fc,8)/8);
+        inputs.push(fc? (Math.atan2(fy,fx)-this.angle)/Math.PI:0);
 
-        // 整列
-        let alignDx=0,alignDy=0,alignN=0;
+        // 5-6: 味方平均との差（分離）
+        let closeCount=0;
         friends.forEach(f=>{
-            let d=Math.hypot(this.x-f.x,this.y-f.y);
-            if(d<R_align){
-                alignN++;
-                alignDx+=Math.cos(f.angle);
-                alignDy+=Math.sin(f.angle);
-            }
+            let d=Math.hypot(f.x-this.x,f.y-this.y);
+            if(d<12) closeCount++;
         });
-        let alignAngle = alignN>0?Math.atan2(alignDy,alignDx):0;
-        let alignDiff = alignN>0?(alignAngle-this.angle)/Math.PI:0;
-        inputs.push(alignN/10);
-        inputs.push(alignDiff);
+        inputs.push(Math.min(closeCount,5)/5);
+        inputs.push(0);
 
-        // 結合
-        let cohDx=0,cohDy=0,cohN=0;
-        friends.forEach(f=>{
-            let d=Math.hypot(this.x-f.x,this.y-f.y);
-            if(d<R_coh){
-                cohN++;
-                cohDx+=f.x-this.x;
-                cohDy+=f.y-this.y;
-            }
+        // 7-8: 敵の密度
+        let ec=0,ex=0,ey=0;
+        enemies.forEach(e=>{
+            let d=Math.hypot(e.x-this.x,e.y-this.y);
+            if(d<120){ec++; ex+=e.x-this.x; ey+=e.y-this.y;}
         });
-        let cohAngle = cohN>0?Math.atan2(cohDy,cohDx):0;
-        inputs.push(cohN/10);
-        inputs.push(cohN>0?(cohAngle-this.angle)/Math.PI:0);
+        inputs.push(Math.min(ec,8)/8);
+        inputs.push(ec? (Math.atan2(ey,ex)-this.angle)/Math.PI:0);
 
-        // 自己
+        // 9-12: 自己状態
         inputs.push(this.energy/100);
         inputs.push(Math.min(this.x,canvas.width-this.x,this.y,canvas.height-this.y)/50);
         inputs.push(this.speed/4);
         inputs.push(Math.sin(this.angle));
 
-        // 死骸
-        if(this.type==='prey'){
-            let nearestM=null, minDM=9999;
-            for(let m of meats){
-                let d=Math.hypot(this.x-m.x,this.y-m.y);
-                if(d<minDM){minDM=d; nearestM=m;}
-            }
-            inputs.push(this.norm(minDM));
-            inputs.push(nearestM?(Math.atan2(nearestM.y-this.y,nearestM.x-this.x)-this.angle)/Math.PI:0);
-        } else {
-            inputs.push(0,0);
-        }
+        // 13-14: 捕食直後減速フラグ
+        inputs.push(this.justHunted>0?1:0);
+        inputs.push(0);
 
-        // 行動
+        // NN
         if(this.energy>0){
-            let [turn,acc]=this.brain.predict(inputs);
+            let [turn,accel]=this.brain.predict(inputs);
             this.angle+=turn*0.25;
-            this.speed=(this.type==='prey'?0.7:3.2)*Math.abs(acc);
-            if(this.cooldown>0) this.speed*=0.3;
+            this.speed=(this.type==='prey'?0.7:3.5)*Math.abs(accel);
+            if(this.justHunted>0) this.speed*=0.3; // 捕食直後の減速
         }
 
         this.x+=Math.cos(this.angle)*this.speed;
@@ -181,41 +150,57 @@ class Creature {
         this.x=Math.max(0,Math.min(canvas.width,this.x));
         this.y=Math.max(0,Math.min(canvas.height,this.y));
 
-        // エネルギー
+        ////////////////////////////////////////////////////////
+        // エネルギー計算（進化圧）
+        ////////////////////////////////////////////////////////
         if(this.type==='prey'){
-            let loss=0.006 + this.speed*0.02;
-            if(sepCount>0) loss += 0.04*sepCount;
-            if(alignN>1){
-                let bonus = Math.max(0,1-Math.abs(alignDiff));
-                loss *= (1-0.25*bonus);
-            }
+            let loss=0.01 + this.speed*this.speed*0.01;
+
+            // 整列ボーナス：近傍と同方向
+            let align=0,ac=0;
+            friends.forEach(f=>{
+                let d=Math.hypot(f.x-this.x,f.y-this.y);
+                if(d<60){
+                    let da=Math.abs(Math.sin((f.angle-this.angle)/2));
+                    align+=1-da; ac++;
+                }
+            });
+            if(ac>0) loss*= (1 - Math.min(0.4, align/ac*0.5)); // 最大40%省エネ
+
+            // 分離ペナルティ：衝突密度
+            let close=0;
+            friends.forEach(f=>{
+                let d=Math.hypot(f.x-this.x,f.y-this.y);
+                if(d<10) close++;
+            });
+            loss += close*0.05;
+
             this.energy-=loss;
-            this.checkEat();
-        } else {
-            let loss=0.05 + this.speed*this.speed*0.01;
+            this.checkEatMeat();
+        }else{
+            let loss=0.05+this.speed*this.speed*0.01;
             this.energy-=loss;
             this.checkHunt();
         }
 
-        if(this.cooldown>0) this.cooldown--;
+        if(this.justHunted>0) this.justHunted--;
         return this.energy>0;
     }
 
     checkHunt(){
-        if(this.energy>90) return;
         for(let i=creatures.length-1;i>=0;i--){
             let c=creatures[i];
-            if(c.type==='prey' && Math.hypot(this.x-c.x,this.y-c.y)<10){
+            if(c.type==='prey'&&Math.hypot(this.x-c.x,this.y-c.y)<10){
                 creatures.splice(i,1);
                 this.energy=100;
-                this.cooldown=80;
+                this.justHunted=30;
                 this.reproduce(90);
                 break;
             }
         }
     }
 
-    checkEat(){
+    checkEatMeat(){
         for(let i=meats.length-1;i>=0;i--){
             let m=meats[i];
             if(Math.hypot(this.x-m.x,this.y-m.y)<10){
@@ -227,81 +212,75 @@ class Creature {
         }
     }
 
-    reproduce(e){
-        const baby=new Creature(this.x,this.y,this.type,
-            new Brain({w1:Array.from(this.brain.w1),w2:Array.from(this.brain.w2)}));
-        baby.energy=e;
+    reproduce(babyEnergy){
+        const baby=new Creature(this.x,this.y,this.type,new Brain({w1:Array.from(this.brain.w1),w2:Array.from(this.brain.w2)}));
+        baby.energy=babyEnergy;
         creatures.push(baby);
     }
 
     draw(){
-        ctx.save();
-        ctx.translate(this.x,this.y);
-        ctx.rotate(this.angle);
-        ctx.fillStyle=this.type==='prey'?'#fff':'#f44';
+        ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.angle);
+        ctx.fillStyle=this.type==='prey'?"#fff":"#f44";
         ctx.beginPath();
-
-        // ★ 直径を半分
-        if(this.type==='prey') ctx.arc(0,0,0.8,0,Math.PI*2);
-        else {ctx.moveTo(2,0);ctx.lineTo(-1.5,-1);ctx.lineTo(-1.5,1);ctx.closePath();}
-
-        ctx.fill();
-        ctx.restore();
+        if(this.type==='prey') ctx.arc(0,0,1.5,0,Math.PI*2);
+        else{ctx.moveTo(4,0);ctx.lineTo(-3,-2);ctx.lineTo(-3,2);ctx.closePath();}
+        ctx.fill(); ctx.restore();
     }
 }
 
-// ===== 保存/ロード =====
+////////////////////////////////////////////////////////////
+// Save / Load
+////////////////////////////////////////////////////////////
 function saveBrain(type){
     const list=creatures.filter(c=>c.type===type);
-    if(!list.length) return;
+    if(!list.length)return;
     const t=list[Math.floor(Math.random()*list.length)];
-    const data={type:type,w1:Array.from(t.brain.w1),w2:Array.from(t.brain.w2)};
-    const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
-    const a=document.createElement('a');
+    const data={type,w1:Array.from(t.brain.w1),w2:Array.from(t.brain.w2)};
+    const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+    const a=document.createElement("a");
     a.href=URL.createObjectURL(blob);
     a.download=`brain_v6_${type}.json`;
     a.click();
 }
-function triggerLoad(type){loadTarget=type;document.getElementById('fileInput').click();}
+function triggerLoad(type){loadTarget=type; document.getElementById('fileInput').click();}
 function handleFileLoad(){
-    const f=document.getElementById('fileInput').files[0]; if(!f)return;
+    const f=document.getElementById('fileInput').files[0];
+    if(!f)return;
     const r=new FileReader();
     r.onload=e=>{
         try{
             const d=JSON.parse(e.target.result);
             creatures.filter(c=>c.type===loadTarget).forEach(c=>c.brain=new Brain(d));
-            document.getElementById('log').innerText='Brain Loaded.';
-        }catch(err){document.getElementById('log').innerText='Load Error.';}
+            document.getElementById('log').innerText="Brain Loaded.";
+        }catch{document.getElementById('log').innerText="Load Error.";}
     };
     r.readAsText(f);
 }
 
-// ===== 初期化 =====
+////////////////////////////////////////////////////////////
+// Init & Loop
+////////////////////////////////////////////////////////////
 function init(){
     canvas.width=window.innerWidth;
     canvas.height=window.innerHeight;
     creatures=[]; meats=[];
-    for(let i=0;i<MAX_PREY;i++) creatures.push(new Creature(Math.random()*canvas.width,Math.random()*canvas.height,'prey'));
-    for(let i=0;i<MAX_HUNTER;i++) creatures.push(new Creature(Math.random()*canvas.width,Math.random()*canvas.height,'hunter'));
+    for(let i=0;i<250;i++) creatures.push(new Creature(Math.random()*canvas.width,Math.random()*canvas.height,'prey'));
+    for(let i=0;i<12;i++) creatures.push(new Creature(Math.random()*canvas.width,Math.random()*canvas.height,'hunter'));
 }
-
-// ===== ループ =====
 function animate(){
-    ctx.fillStyle='rgba(5,5,5,0.5)';
+    ctx.fillStyle='rgba(5,5,5,0.4)';
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
     for(let i=creatures.length-1;i>=0;i--){
         if(!creatures[i].update()){
             if(creatures[i].type==='hunter') meats.push({x:creatures[i].x,y:creatures[i].y});
             creatures.splice(i,1);
-        } else creatures[i].draw();
+        }else creatures[i].draw();
     }
 
     meats.forEach(m=>{
-        ctx.fillStyle='#0fc';
-        ctx.beginPath();
-        ctx.arc(m.x,m.y,1.3,0,Math.PI*2);
-        ctx.fill();
+        ctx.fillStyle="#0fc";
+        ctx.beginPath(); ctx.arc(m.x,m.y,1.2,0,Math.PI*2); ctx.fill();
     });
 
     document.getElementById('preyCnt').innerText=creatures.filter(c=>c.type==='prey').length;
@@ -310,8 +289,7 @@ function animate(){
 
     requestAnimationFrame(animate);
 }
-
-window.addEventListener('resize',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;});
+window.addEventListener('resize',()=>{canvas.width=window.innerWidth; canvas.height=window.innerHeight;});
 init(); animate();
 </script>
 </body>
