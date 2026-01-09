@@ -197,7 +197,7 @@ function handleFileLoad() {
 function init() {
     canvas.width = window.innerWidth; canvas.height = window.innerHeight;
     creatures = []; meats = [];
-    for(let i=0; i<280; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'prey'));
+    for(let i=0; i<380; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'prey'));
     for(let i=0; i<10; i++) creatures.push(new Creature(Math.random()*canvas.width, Math.random()*canvas.height, 'hunter'));
 }
 
