@@ -150,7 +150,7 @@ class Creature {
 
         if(this.type === 'prey'){
             if(this.energy > 0){
-                this.speed = 0.7 * Math.abs(accel);
+                this.speed = 3.2 * Math.abs(accel);
             }else{
                 this.speed = 0; // 草食は死なず停止
             }
