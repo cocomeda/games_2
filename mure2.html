@@ -140,7 +140,7 @@ class Creature{
             if(this.energy>0){
                 let [turn,accel]=this.brain.predict(inputs);
                 this.angle+=turn*0.25;
-                this.speed=0.7*Math.abs(accel);
+                this.speed=3.2*Math.abs(accel);
             }else{
                 this.speed=0; // 停止
             }
