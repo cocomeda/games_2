@@ -6,15 +6,14 @@
     <title>Hippocampus Trainer Pro</title>
     <style>
         :root {
-            /* 背景を薄いグレー/オフホワイト系に変更 */
             --bg-color: #f0f2f5; 
             --card-bg: #ffffff;
-            --accent-color: #4e5d94; /* 背景に合わせて少し落ち着いたトーンに */
+            --accent-color: #4e5d94; 
             --text-color: #333333;
             --success: #43b581;
             --error: #f04747;
             --active: #faa61a;
-            --lock-bg: rgba(255, 255, 255, 0.6); /* ロック時も白ベースに */
+            --lock-bg: rgba(255, 255, 255, 0.6);
         }
 
         body {
@@ -42,12 +41,10 @@
             padding: 15px;
             border-radius: 20px;
             margin-bottom: 20px;
-            /* 影を柔らかく */
             box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         }
 
         .control-row { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; }
-        /* ボタンの色味を調整 */
         .btn-small { width: 40px; height: 40px; font-size: 20px; border: none; border-radius: 12px; background: #e4e6eb; color: #333; cursor: pointer; transition: 0.2s; }
         .btn-small:active { background: var(--accent-color); color: white; transform: scale(0.9); }
         .label-text { font-size: 13px; opacity: 0.6; letter-spacing: 1px; font-weight: bold; }
@@ -76,12 +73,11 @@
             border: 2px solid rgba(0,0,0,0.05);
         }
 
-        /* タイルの色味を背景に合わせて調整 */
         .cell {
             background: #ffffff;
-            border: 2px solid darkgray; /* 枠線を少し太くはっきり */
+            border: 2px solid darkgray; 
             border-radius: 12px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05); /* 外側に軽い影 */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             box-sizing: border-box;
             cursor: pointer;
@@ -223,25 +219,46 @@
         statusElement.textContent = "Go!";
     }
 
-    function handleCellClick(index) {
+    async function handleCellClick(index) {
         if (isShowing || sequence.length === 0) return;
-        userSequence.push(index);
-        const expected = sequence[userSequence.length - 1];
+        
+        const expected = sequence[userSequence.length];
 
         if (index === expected) {
+            userSequence.push(index);
             flashCell(index, 'correct');
             if (userSequence.length === sequence.length) {
                 showSuccess();
             }
         } else {
+            // 失敗時の挙動
+            isShowing = true; // 演出中の操作をロック
             flashCell(index, 'wrong');
-            statusElement.textContent = "Failed";
+            statusElement.innerHTML = `<span style="color:var(--error)">FAILED!</span>`;
+
+            // 本来の正解タイルを点滅させて表示
+            const cells = document.querySelectorAll('.cell');
+            const correctCell = cells[expected];
+            
+            if (correctCell) {
+                await wait(400); // 間違えた赤色表示が終わるのを少し待つ
+                for (let i = 0; i < 1; i++) {
+                    correctCell.classList.add('active');
+                    await wait(200);
+                    correctCell.classList.remove('active');
+                    await wait(150);
+                }
+            }
+
+            await wait(500);
             sequence = [];
+            isShowing = false;
+            statusElement.textContent = "Ready to Start";
         }
     }
 
     function showSuccess() {
-        statusElement.textContent = "Excellent!";
+        statusElement.textContent = "EXCELLENT!";
         successScreen.classList.add('show');
         const cells = document.querySelectorAll('.cell');
         cells.forEach(c => c.classList.add('all-success'));
@@ -266,3 +283,5 @@
 </script>
 </body>
 </html>
+
+
