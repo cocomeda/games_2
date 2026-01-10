@@ -216,12 +216,47 @@ function draw() {
     ctx.fillStyle = medaka.stamina > 25 ? "#66bb6a" : "#ef5350"; ctx.fillRect(20, 55, medaka.stamina, 12);
     ctx.strokeStyle = "#01579b"; ctx.strokeRect(20, 55, 100, 12);
 
+
+
+
+
+
+
     if (isGameOver) {
-        ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "white"; ctx.font = "bold 30px sans-serif"; ctx.textAlign = "center";
-        ctx.fillText("GAME OVER", canvas.width/2, canvas.height/2);
-        ctx.font = "18px sans-serif"; ctx.fillText(Date.now()-gameOverTime<1000?"...":"タップでリスタート", canvas.width/2, canvas.height/2 + 50);
+        ctx.fillStyle = "rgba(0,0,0,0.7)"; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = "white"; 
+        ctx.textAlign = "center";
+        
+        // "GAME OVER" の文字
+        ctx.font = "bold 30px sans-serif"; 
+        ctx.fillText("GAME OVER", canvas.width/2, canvas.height/2 - 40);
+        
+        // 今回のスコアを大きく表示
+        ctx.fillStyle = "#ffeb3b"; // 目立つ黄色
+        ctx.font = "bold 50px sans-serif";
+        ctx.fillText(Math.floor(score), canvas.width/2, canvas.height/2 + 20);
+        
+        // 「SCORE」というラベル
+        ctx.fillStyle = "white";
+        ctx.font = "18px sans-serif";
+        ctx.fillText("SCORE", canvas.width/2, canvas.height/2 - 10);
+
+        // リスタートの案内
+        ctx.font = "16px sans-serif"; 
+        ctx.fillText(Date.now() - gameOverTime < 1000 ? "..." : "タップしてリスタート", canvas.width/2, canvas.height/2 + 70);
     }
+
+
+
+
+
+
+
+
+    
+
 }
 
 function loop() { update(); draw(); requestAnimationFrame(loop); }
