@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>歴史人物アナグラム - 和モダン</title>
+    <style>
+        :root {
+            --primary: #465d4c; /* 落ち着いた抹茶色 */
+            --accent: #c0402e;  /* 落ち着いた朱色 */
+            --bg: #f5f3ed;      /* 和紙のような生成り色 */
+            --text: #2c2c2c;
+            --tile-bg: #ffffff;
+        }
+
+        body {
+            font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+            text-align: center;
+            background-color: var(--bg);
+            margin: 0;
+            padding: 10px;
+            color: var(--text);
+            user-select: none;
+            line-height: 1.6;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.7);
+            padding: 30px 15px;
+            border-radius: 2px; /* あえて角を丸めすぎず端正に */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            border-top: 5px solid var(--primary);
+            border-bottom: 5px solid var(--primary);
+            max-width: 500px;
+            box-sizing: border-box;
+            margin: 20px auto;
+            position: relative;
+        }
+
+        /* 和風の装飾 */
+        .container::before, .container::after {
+            content: "◆";
+            color: var(--primary);
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.8rem;
+        }
+
+        h1 { 
+            font-size: 1.6rem; 
+            margin: 0 0 5px 0; 
+            letter-spacing: 3px;
+            font-weight: 600;
+        }
+
+        .progress-bar { 
+            font-size: 0.85rem; 
+            color: #777; 
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+            display: inline-block;
+            padding: 0 20px 5px;
+        }
+
+        .answer-display {
+            font-size: 2rem;
+            min-height: 3rem;
+            margin: 20px auto;
+            padding: 10px;
+            background: transparent;
+            border-bottom: 2px dashed var(--primary);
+            width: 85%;
+            letter-spacing: 4px;
+            font-weight: bold;
+            color: var(--accent);
+            word-break: break-all;
+        }
+
+        .tile-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+            margin: 30px 0;
+            min-height: 100px;
+        }
+
+        .tile {
+            width: 54px;
+            height: 54px;
+            background: var(--tile-bg);
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: all 0.2s;
+            color: var(--primary);
+        }
+
+        .tile:hover {
+            background: #fdfdfd;
+            border-color: var(--primary);
+        }
+
+        .tile:active {
+            transform: scale(0.95);
+            box-shadow: none;
+        }
+
+        .tile.used {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.8);
+        }
+
+        .controls { margin-top: 20px; }
+        .btn {
+            padding: 10px 24px;
+            margin: 5px;
+            font-size: 0.95rem;
+            border: 1px solid var(--primary);
+            background: transparent;
+            color: var(--primary);
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        #message {
+            margin-top: 20px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            min-height: 3.5em;
+        }
+
+        .success { color: var(--primary); }
+        .error { color: var(--accent); }
+
+        .stats { 
+            margin-top: 20px; 
+            font-size: 0.9rem; 
+            color: #666;
+            letter-spacing: 1px;
+        }
+
+        /* モバイル対応 */
+        @media (max-width: 400px) {
+            .tile { width: 46px; height: 46px; font-size: 1.4rem; }
+            h1 { font-size: 1.3rem; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>歴史人物アナグラム</h1>
+    <div class="progress-bar" id="progressBar">読み込み中...</div>
+    
+    <div class="answer-display" id="answerDisplay"></div>
+    <div class="tile-container" id="tileContainer"></div>
+
+    <div class="controls">
+        <button class="btn" onclick="clearAnswer()">一文字戻る</button>
+    </div>
+    
+    <div id="message"></div>
+    <div class="stats">
+        読了数: <span id="correctCount">0</span> / <span id="totalLabel">0</span>
+    </div>
+</div>
+
+<script>
+    const rawWords = [
+        "ひみこ", "しょうとくたいし", "おののいもこ", "なかとみのかまたり", "しぶさわえいいち",
+        "すがわらのみちざね", "たいらのきよもり", "みなもとのよりとも", "みなもとのよしつね", "べんけい",
+        "ほうじょうときむね", "あしかがたかうじ", "あしかがよしみつ", "あしかがよしまさ", "おだのぶなが",
+        "とよとみひでよし", "とくがわいえやす", "あけちみつひで", "うえすぎけんしん", "たけだしんげん",
+        "いまがわよしもと", "もうりもとなり", "だてまさむね", "さなだゆきむら", "いしだみつなり",
+        "とくがわいえみつ", "まつだいらさだのぶ",
+        "さかもとりょうま", "さいごうたかもり", "かつかいしゅう", "ふくざわゆきち", "いたがきたいすけ",
+        "よしだしょういん", "たかすぎしんさく", "いとうひろぶみ", "いぬかいつよし", "なつめそうせき",
+        "ひぐちいちよう", "のぐちひでよ", "すぎはらちうね", "ひらつからいちょう", "よさのあきこ",
+        "いのうただたか", "つだうめこ", "きたざとしばさぶろう", "かつしかほくさい", "うたがわひろしげ",
+        "さいちょう", "くうかい", "しんらん", "にちれん",
+        "せいしょうなごん", "むらさきしきぶ", "きのつらゆき", "せんのりきゅう", "まつおばしょう",
+        "いえすきりすと", "がんじー", "こうめい",
+        "なぽれおん", "ないちんげーる", "えじそん", "ころんぶす",
+        "もーつぁると", "ばっは", "だーうぃん",
+        "にゅーとん", "あいんしゅたいん", "みけらんじぇろ", "ぴかそ",
+        "まりーあんとわねっと", "じゃんぬだるく", "りんかーん", "けねでぃ",
+        "のーべる", "ふぁぶーる", "へれんけらー", "あんねふらんく",
+        "まぜらん","たいらのまさかど", "ふじわらのみちなが", "ふじわらのよりみち","ほうじょうまさこ", "くすのきまさしげ","ほそかわがらしゃ","えどがわらんぽ", "あくたがわりゅうのすけ", "だざいおさむ", "かわばたやすなり",
+        "みやざわけんじ","くれおぱとら","そくらてす", "ぷらとん", "ありすとてれす", "がりれおがりれい",
+        "しぇいくすぴあ", "るそー","かんと", "へーげる",
+        "まるくす", "ふろいと"
+    ];
+
+    const allWords = Array.from(new Set(rawWords));
+    let remainingWords = [...allWords];
+    let targetWord = "";
+    let currentInput = "";
+    let totalCorrect = 0;
+    let isProcessing = false;
+    let usedIndices = [];
+
+    function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    function hasOriginalSequence(original, scrambled) {
+        for (let i = 0; i < original.length - 1; i++) {
+            let sequence = original.substring(i, i + 2);
+            if (scrambled.includes(sequence)) return true;
+        }
+        return false;
+    }
+
+    function nextQuestion() {
+        if (remainingWords.length === 0) {
+            document.getElementById("message").innerHTML = "<span class='success'>全問読了いたしました。<br>誠にお見事です。</span>";
+            document.getElementById("tileContainer").innerHTML = "<button class='btn' onclick='resetGame()'>もう一度最初から</button>";
+            updateUI();
+            return;
+        }
+
+        const randomIndex = Math.floor(Math.random() * remainingWords.length);
+        targetWord = remainingWords[randomIndex];
+
+        let scrambled = "";
+        let attempts = 0;
+        while (attempts < 50) {
+            let arr = targetWord.split('');
+            let testScrambled = shuffle(arr).join('');
+            if (testScrambled !== targetWord && !hasOriginalSequence(targetWord, testScrambled)) {
+                scrambled = testScrambled;
+                break;
+            }
+            attempts++;
+            scrambled = testScrambled;
+        }
+
+        currentInput = "";
+        usedIndices = [];
+        document.getElementById("answerDisplay").innerText = "";
+        document.getElementById("message").innerText = "";
+        isProcessing = false;
+        renderTiles(scrambled);
+        updateUI();
+    }
+
+    function renderTiles(str) {
+        const container = document.getElementById("tileContainer");
+        container.innerHTML = "";
+        str.split('').forEach((char, index) => {
+            const tile = document.createElement("div");
+            tile.className = "tile";
+            tile.innerText = char;
+            tile.onclick = () => selectTile(char, index, tile);
+            container.appendChild(tile);
+        });
+    }
+
+    function selectTile(char, index, tileElement) {
+        if (isProcessing || tileElement.classList.contains("used")) return;
+
+        currentInput += char;
+        usedIndices.push(index);
+        tileElement.classList.add("used");
+        document.getElementById("answerDisplay").innerText = currentInput;
+
+        if (currentInput.length === targetWord.length) {
+            checkAnswer();
+        }
+    }
+
+    function clearAnswer() {
+        if (isProcessing || usedIndices.length === 0) return;
+        const lastIndex = usedIndices.pop();
+        currentInput = currentInput.slice(0, -1);
+        document.getElementById("answerDisplay").innerText = currentInput;
+        const tiles = document.getElementsByClassName("tile");
+        tiles[lastIndex].classList.remove("used");
+    }
+
+    function checkAnswer() {
+        isProcessing = true;
+        const msg = document.getElementById("message");
+
+        if (currentInput === targetWord) {
+            msg.innerHTML = "<span class='success'>正解！</span>";
+            const idx = remainingWords.indexOf(targetWord);
+            if (idx > -1) remainingWords.splice(idx, 1);
+            totalCorrect++;
+            setTimeout(nextQuestion, 1200);
+        } else {
+            msg.innerHTML = `<span class='error'>残念。<br>正解は「${targetWord}」でした。</span>`;
+            setTimeout(nextQuestion, 2200);
+        }
+        updateUI();
+    }
+
+    function resetGame() {
+        remainingWords = [...allWords];
+        totalCorrect = 0;
+        nextQuestion();
+    }
+
+    function updateUI() {
+        document.getElementById("correctCount").innerText = totalCorrect;
+        const total = allWords.length;
+        document.getElementById("totalLabel").innerText = total;
+        document.getElementById("progressBar").innerText = `残り: ${remainingWords.length}人 / 全${total}人`;
+    }
+
+    nextQuestion();
+</script>
+
+</body>
+</html>
