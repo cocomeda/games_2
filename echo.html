@@ -3,160 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Improved Web Echo System</title>
+    <title>WebXR 空間移動ゲーム</title>
     <style>
-        body { background: #001a00; color: #00ff00; font-family: 'Courier New', monospace; text-align: center; margin: 0; padding: 20px; }
-        #status { font-size: 0.9rem; margin-bottom: 10px; color: #aaa; }
-        #rec-lamp { display: inline-block; width: 10px; height: 10px; background: #333; border-radius: 50%; margin-right: 5px; }
-        .recording #rec-lamp { background: #ff0000; box-shadow: 0 0 10px #ff0000; }
-        
-        canvas { 
-            border: 2px solid #004400; 
-            width: 100%; 
-            max-width: 800px; 
-            height: 300px; 
-            background: #000;
-            display: block;
-            margin: 20px auto;
+        body { margin: 0; overflow: hidden; font-family: sans-serif; background: #000; color: white; }
+        #overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+            padding: 40px; pointer-events: none; z-index: 5;
         }
-        
-        .controls { margin: 20px; }
-        button { 
-            padding: 15px 30px; 
-            font-size: 1.1rem; 
-            font-weight: bold;
-            cursor: pointer; 
-            background: #00ff00; 
-            border: none; 
-            color: #000;
-            border-radius: 5px;
+        #stats { font-size: 24px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 10px; }
+        #msg { font-size: 32px; font-weight: bold; text-align: center; }
+        #start-btn {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            padding: 20px 40px; font-size: 20px; background: #0f0; border: none; border-radius: 10px;
+            z-index: 10; cursor: pointer; pointer-events: auto;
         }
-        button:active { background: #008800; }
-        #log { font-size: 0.8rem; color: #666; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-    <h1>ECHO LOCATOR v2</h1>
-    
-    <div id="status" class="">
-        <span id="rec-lamp"></span> <span id="status-text">マイク未接続 - ボタンを押して開始</span>
+<div id="overlay">
+    <div id="stats">
+        距離: <span id="dist-val">5.00</span> m<br>
+        ポイント: <span id="points">0</span>
     </div>
+    <div id="msg">5メートル歩こう！</div>
+</div>
 
-    <canvas id="visualizer"></canvas>
+<button id="start-btn">ARを開始して計測</button>
 
-    <div class="controls">
-        <button id="pingBtn">PING 発信</button>
-    </div>
+<script type="module">
+    let xrSession = null;
+    let xrRefSpace = null;
+    let initialPos = null;
+    let points = 0;
+    const targetDistance = 5.0; // 5メートル
 
-    <div id="log">※ 周囲が静かな場所で、音量を上げて試してください</div>
+    const distEl = document.getElementById('dist-val');
+    const pointsEl = document.getElementById('points');
+    const msgEl = document.getElementById('msg');
+    const startBtn = document.getElementById('start-btn');
 
-    <script>
-        const canvas = document.getElementById('visualizer');
-        const ctx = canvas.getContext('2d');
-        const statusDiv = document.getElementById('status');
-        const statusText = document.getElementById('status-text');
-        
-        let audioCtx, analyser, dataArray;
-        let isInitialized = false;
-
-        async function initAudio() {
-            try {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                
-                // マイクの使用許可を求める
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: {
-                        echoCancellation: false, // エコー除去を切る（エコーを見たいので）
-                        noiseSuppression: false,
-                        autoGainControl: false
-                    } 
-                });
-
-                const source = audioCtx.createMediaStreamSource(stream);
-                analyser = audioCtx.createAnalyser();
-                
-                // 感度を最大級に上げる設定
-                analyser.fftSize = 512;
-                analyser.minDecibels = -85; // かなり小さな音も拾う
-                analyser.maxDecibels = -10;
-                
-                source.connect(analyser);
-                dataArray = new Uint8Array(analyser.frequencyBinCount);
-                
-                statusDiv.classList.add('recording');
-                statusText.innerText = "リスニング中...";
-                isInitialized = true;
-                draw();
-                
-            } catch (err) {
-                console.error(err);
-                statusText.innerText = "エラー: マイクへのアクセスが拒否されました";
-                statusText.style.color = "red";
-            }
+    async function startAR() {
+        if (!navigator.xr) {
+            alert("お使いのブラウザはWebXRに対応していません。AndroidのChromeなどで試してください。");
+            return;
         }
 
-        function sendPing() {
-            if (!isInitialized) return;
-
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-
-            // コウモリのようなチャープ音（高音からさらに高音へスウィープ）
-            const startTime = audioCtx.currentTime;
-            const duration = 0.05;
-
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(2000, startTime);
-            osc.frequency.exponentialRampToValueAtTime(8000, startTime + duration);
-
-            gain.gain.setValueAtTime(0.5, startTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-
-            osc.start();
-            osc.stop(startTime + duration);
-        }
-
-        function draw() {
-            requestAnimationFrame(draw);
-            analyser.getByteFrequencyData(dataArray);
-
-            // 背景を薄く塗りつぶす（残像エフェクト）
-            ctx.fillStyle = 'rgba(0, 20, 0, 0.2)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            const barWidth = (canvas.width / dataArray.length) * 2;
-            let x = 0;
-
-            for (let i = 0; i < dataArray.length; i++) {
-                const barHeight = (dataArray[i] / 255) * canvas.height;
-                
-                // 低音は暗く、高音は明るく表示
-                const hue = 120; // 緑
-                const sat = 100;
-                const light = dataArray[i] / 2.5; 
-                
-                ctx.fillStyle = `hsl(${hue}, ${sat}%, ${light}%)`;
-                ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
-                x += barWidth;
-            }
-        }
-
-        document.getElementById('pingBtn').addEventListener('click', async () => {
-            if (!isInitialized) {
-                await initAudio();
-                // 少し待ってから最初のPingを打つ
-                setTimeout(sendPing, 500);
-            } else {
-                if (audioCtx.state === 'suspended') {
-                    await audioCtx.resume();
-                }
-                sendPing();
-            }
+        // ARセッションの開始（カメラ背景＋トラッキング）
+        xrSession = await navigator.xr.requestSession('immersive-ar', {
+            requiredFeatures: ['local-floor']
         });
-    </script>
+
+        startBtn.style.display = 'none';
+        
+        // 参照空間の取得
+        xrRefSpace = await xrSession.requestReferenceSpace('local-floor');
+
+        // メインループ
+        xrSession.requestAnimationFrame(onXRFrame);
+    }
+
+    function onXRFrame(time, frame) {
+        const pose = frame.getViewerPose(xrRefSpace);
+        if (pose) {
+            const currentPos = pose.transform.position;
+
+            // 最初の位置を記録
+            if (!initialPos) {
+                initialPos = { x: currentPos.x, y: currentPos.y, z: currentPos.z };
+            }
+
+            // 初期位置からの直線距離を計算（三平方の定理）
+            const dx = currentPos.x - initialPos.x;
+            const dy = currentPos.y - initialPos.y;
+            const dz = currentPos.z - initialPos.z;
+            const moved = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+            // 残り距離
+            let remaining = targetDistance - moved;
+            if (remaining < 0) remaining = 0;
+
+            // 表示更新
+            distEl.innerText = remaining.toFixed(2);
+
+            if (remaining <= 0) {
+                points += 100;
+                pointsEl.innerText = points;
+                msgEl.innerText = "到達！+100pt";
+                msgEl.style.color = "#0f0";
+                
+                // 次の地点を設定（今の場所をスタートにする）
+                initialPos = { x: currentPos.x, y: currentPos.y, z: currentPos.z };
+                setTimeout(() => {
+                    msgEl.innerText = "次の5メートルへ！";
+                    msgEl.style.color = "#fff";
+                }, 2000);
+            }
+        }
+        xrSession.requestAnimationFrame(onXRFrame);
+    }
+
+    startBtn.addEventListener('click', startAR);
+</script>
 </body>
 </html>
