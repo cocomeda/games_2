@@ -2,109 +2,189 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebXR 空間移動ゲーム</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AR 5m Walk Game</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; background: #000; color: white; }
+        body { margin: 0; overflow: hidden; font-family: 'Arial', sans-serif; background: #000; }
+        
+        /* 背面のカメラ映像 */
+        #camera-view {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; z-index: -1;
+        }
+
+        /* UIレイヤー */
         #overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-            padding: 40px; pointer-events: none; z-index: 5;
+            pointer-events: none; display: flex; flex-direction: column;
+            align-items: center; justify-content: space-between;
+            padding: 40px 20px; box-sizing: border-box;
+            color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
         }
-        #stats { font-size: 24px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 10px; }
-        #msg { font-size: 32px; font-weight: bold; text-align: center; }
-        #start-btn {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            padding: 20px 40px; font-size: 20px; background: #0f0; border: none; border-radius: 10px;
-            z-index: 10; cursor: pointer; pointer-events: auto;
+
+        #stats { font-size: 24px; text-align: center; background: rgba(0,0,0,0.4); padding: 15px; border-radius: 15px; }
+        
+        /* ターゲットの円 */
+        #target-container { display: flex; align-items: center; justify-content: center; flex-grow: 1; }
+        #target-circle {
+            width: 120px; height: 120px; border: 8px solid #0f0; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; font-weight: bold; background: rgba(0,255,0,0.1);
+            transition: transform 0.1s ease-out;
         }
+
+        /* スタート画面 */
+        #start-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 10; text-align: center;
+        }
+        button {
+            padding: 20px 40px; font-size: 22px; background: #0f0; border: none;
+            border-radius: 50px; font-weight: bold; cursor: pointer; color: #000;
+        }
+        .instruction { color: #ccc; margin-top: 20px; font-size: 14px; line-height: 1.6; }
     </style>
 </head>
 <body>
 
-<div id="overlay">
-    <div id="stats">
-        距離: <span id="dist-val">5.00</span> m<br>
-        ポイント: <span id="points">0</span>
+<video id="camera-view" autoplay playsinline></video>
+
+<div id="start-screen">
+    <h1 style="color: #0f0;">AR 5m CHALLENGE</h1>
+    <button id="start-btn">カメラとセンサーを許可</button>
+    <div class="instruction">
+        【遊び方】<br>
+        1. 正面を向いて開始！<br>
+        2. 5メートル先のターゲットに向かって歩く<br>
+        3. 実際に一歩踏み出すと距離が縮まります
     </div>
-    <div id="msg">5メートル歩こう！</div>
 </div>
 
-<button id="start-btn">ARを開始して計測</button>
+<div id="overlay">
+    <div id="stats">
+        SCORE: <span id="score">0</span><br>
+        <span style="font-size: 40px;">あと <span id="distance">5.0</span> m</span>
+    </div>
 
-<script type="module">
-    let xrSession = null;
-    let xrRefSpace = null;
-    let initialPos = null;
-    let points = 0;
-    const targetDistance = 5.0; // 5メートル
+    <div id="target-container">
+        <div id="target-circle">TARGET</div>
+    </div>
 
-    const distEl = document.getElementById('dist-val');
-    const pointsEl = document.getElementById('points');
-    const msgEl = document.getElementById('msg');
+    <div id="footer">
+        スマホを持ってしっかり歩こう！
+    </div>
+</div>
+
+<script>
+    let score = 0;
+    let distance = 5.0;
+    let isGameActive = false;
+    let lastAcc = 0;
+    const STEP_LENGTH = 0.7; // 1歩を70cmと定義
+
+    const video = document.getElementById('camera-view');
+    const distanceEl = document.getElementById('distance');
+    const scoreEl = document.getElementById('score');
+    const targetCircle = document.getElementById('target-circle');
     const startBtn = document.getElementById('start-btn');
 
-    async function startAR() {
-        if (!navigator.xr) {
-            alert("お使いのブラウザはWebXRに対応していません。AndroidのChromeなどで試してください。");
-            return;
+    // 1. カメラの初期化
+    async function initCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment" }, 
+                audio: false 
+            });
+            video.srcObject = stream;
+        } catch (e) {
+            alert("カメラを起動できません。設定で許可してください。");
+            console.error(e);
         }
+    }
 
-        // ARセッションの開始（カメラ背景＋トラッキング）
-        xrSession = await navigator.xr.requestSession('immersive-ar', {
-            requiredFeatures: ['local-floor']
-        });
+    // 2. 歩行検知（加速度センサー）
+    function handleMotion(e) {
+        if (!isGameActive) return;
 
-        startBtn.style.display = 'none';
+        const acc = e.accelerationIncludingGravity;
+        if (!acc) return;
+
+        // 3軸の合成加速度
+        const totalAcc = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
         
-        // 参照空間の取得
-        xrRefSpace = await xrSession.requestReferenceSpace('local-floor');
-
-        // メインループ
-        xrSession.requestAnimationFrame(onXRFrame);
+        // 13以上の強い揺れを1歩とみなす（簡易ロジック）
+        if (totalAcc > 13 && (totalAcc - lastAcc) > 2.5) {
+            onStep();
+        }
+        lastAcc = totalAcc;
     }
 
-    function onXRFrame(time, frame) {
-        const pose = frame.getViewerPose(xrRefSpace);
-        if (pose) {
-            const currentPos = pose.transform.position;
+    function onStep() {
+        if (distance > 0) {
+            distance -= STEP_LENGTH;
+            if (distance < 0) distance = 0;
+            updateDisplay();
 
-            // 最初の位置を記録
-            if (!initialPos) {
-                initialPos = { x: currentPos.x, y: currentPos.y, z: currentPos.z };
-            }
-
-            // 初期位置からの直線距離を計算（三平方の定理）
-            const dx = currentPos.x - initialPos.x;
-            const dy = currentPos.y - initialPos.y;
-            const dz = currentPos.z - initialPos.z;
-            const moved = Math.sqrt(dx*dx + dy*dy + dz*dz);
-
-            // 残り距離
-            let remaining = targetDistance - moved;
-            if (remaining < 0) remaining = 0;
-
-            // 表示更新
-            distEl.innerText = remaining.toFixed(2);
-
-            if (remaining <= 0) {
-                points += 100;
-                pointsEl.innerText = points;
-                msgEl.innerText = "到達！+100pt";
-                msgEl.style.color = "#0f0";
-                
-                // 次の地点を設定（今の場所をスタートにする）
-                initialPos = { x: currentPos.x, y: currentPos.y, z: currentPos.z };
-                setTimeout(() => {
-                    msgEl.innerText = "次の5メートルへ！";
-                    msgEl.style.color = "#fff";
-                }, 2000);
+            if (distance === 0) {
+                goal();
             }
         }
-        xrSession.requestAnimationFrame(onXRFrame);
     }
 
-    startBtn.addEventListener('click', startAR);
+    function updateDisplay() {
+        distanceEl.innerText = distance.toFixed(1);
+        // 近づくほどターゲットを大きくする演出
+        const scale = 1 + (5.0 - distance) * 0.4;
+        targetCircle.style.transform = `scale(${scale})`;
+    }
+
+    function goal() {
+        isGameActive = false;
+        score += 100;
+        scoreEl.innerText = score;
+        targetCircle.style.background = "rgba(0, 255, 0, 0.6)";
+        targetCircle.innerText = "GOAL!";
+        
+        // 2秒後にリセットして次の5mへ
+        setTimeout(() => {
+            distance = 5.0;
+            targetCircle.style.background = "rgba(0, 255, 0, 0.1)";
+            targetCircle.innerText = "TARGET";
+            updateDisplay();
+            isGameActive = true;
+        }, 2000);
+    }
+
+    // スタートボタン
+    startBtn.addEventListener('click', async () => {
+        // カメラ起動
+        await initCamera();
+
+        // センサーの許可 (iOS 13+ 対策)
+        if (typeof DeviceMotionEvent.requestPermission === 'function') {
+            try {
+                const res = await DeviceMotionEvent.requestPermission();
+                if (res === 'granted') {
+                    window.addEventListener('devicemotion', handleMotion);
+                    startGame();
+                } else {
+                    alert("センサーの許可が必要です");
+                }
+            } catch (e) {
+                alert("エラーが発生しました");
+            }
+        } else {
+            // Android等
+            window.addEventListener('devicemotion', handleMotion);
+            startGame();
+        }
+    });
+
+    function startGame() {
+        document.getElementById('start-screen').style.display = 'none';
+        isGameActive = true;
+    }
 </script>
 </body>
 </html>
