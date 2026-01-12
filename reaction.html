@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reaction Time Tester - Stat Filtered</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #ef4444; --secondary: #64748b; --bg: #f8fafc;
+            --card: #ffffff; --text: #1e293b; --warning: #f59e0b; --success: #22c55e;
+        }
+        body { font-family: sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 2rem; }
+        .container { max-width: 600px; width: 100%; background: var(--card); padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; }
+        .controls { margin-bottom: 2rem; display: flex; justify-content: center; gap: 1rem; align-items: center; }
+        input { padding: 0.6rem; width: 60px; border-radius: 0.5rem; border: 1px solid #ddd; }
+        .main-button {
+            width: 250px; height: 250px; background: var(--secondary); color: white; border-radius: 50%;
+            margin: 2rem auto; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; user-select: none; transition: all 0.2s; font-weight: bold; font-size: 1.5rem;
+            border: 8px solid rgba(255,255,255,0.2);
+        }
+        .main-button.ready { background: var(--success); }
+        .main-button.active { background: var(--primary); transform: scale(1.05); }
+        .btn-reset { background: #e2e8f0; border: none; padding: 0.6rem 1.2rem; border-radius: 0.5rem; cursor: pointer; }
+        .status { font-weight: bold; min-height: 1.5rem; margin: 1rem 0; color: var(--secondary); }
+        .info-box { background: #f1f5f9; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem; text-align: left; font-size: 0.9rem; }
+        .warning-text { color: var(--warning); font-weight: bold; }
+        canvas { margin-top: 2rem; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>精密反応速度測定</h1>
+    <h1>(音がなったらタップ)</h1>
+    <div class="controls">
+        <label>試行回数:</label>
+        <input type="number" id="countInput" value="10" min="5">
+        <button id="resetBtn" class="btn-reset">Reset</button>
+    </div>
+
+    <div id="statusText" class="status">STARTを押して開始</div>
+    <div id="mainBtn" class="main-button ready">START</div>
+
+    <div id="results" style="display:none;">
+        <div id="statsSummary" class="info-box"></div>
+        <canvas id="reactionChart"></canvas>
+    </div>
+</div>
+
+<script>
+    const mainBtn = document.getElementById('mainBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const countInput = document.getElementById('countInput');
+    const statusText = document.getElementById('statusText');
+    const resultsDiv = document.getElementById('results');
+    
+    let audioCtx, startTime, timerId;
+    let rawResults = []; 
+    let isWaiting = false, isTestRunning = false;
+    let currentTrial = 0, maxTrials = 10;
+
+    function playBeep() {
+        if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.frequency.value = 1000;
+        gain.gain.setValueAtTime(0, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 0.01);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+    }
+
+    const handleAction = (e) => {
+        e.preventDefault();
+        if (!isTestRunning) { startTest(); return; }
+        if (isTestRunning && !isWaiting) {
+            clearTimeout(timerId);
+            statusText.innerText = "フライング！やり直し";
+            setTimeout(nextTrial, 1000);
+            return;
+        }
+        if (isWaiting) {
+            const rt = performance.now() - startTime;
+            isWaiting = false;
+            mainBtn.classList.remove('active');
+            if (rt < 100) {
+                statusText.innerText = "100ms以下は無効です";
+                setTimeout(nextTrial, 1000);
+                return;
+            }
+            rawResults.push(rt);
+            currentTrial++;
+            if (currentTrial < maxTrials) nextTrial(); else finishTask();
+        }
+    };
+
+    mainBtn.onmousedown = handleAction;
+    mainBtn.ontouchstart = handleAction;
+
+    function startTest() {
+        rawResults = []; currentTrial = 0;
+        maxTrials = parseInt(countInput.value);
+        isTestRunning = true;
+        resultsDiv.style.display = 'none';
+        mainBtn.classList.remove('ready');
+        nextTrial();
+    }
+
+    function nextTrial() {
+        isWaiting = false;
+        mainBtn.innerText = "WAIT";
+        statusText.innerText = `試行 ${currentTrial + 1} / ${maxTrials}`;
+        timerId = setTimeout(() => {
+            playBeep();
+            mainBtn.classList.add('active');
+            mainBtn.innerText = "TAP!!";
+            startTime = performance.now();
+            isWaiting = true;
+        }, Math.random() * 600 + 400);
+    }
+
+    function finishTask() {
+        isTestRunning = false;
+        mainBtn.innerText = "RETRY";
+        mainBtn.classList.add('ready');
+        statusText.innerText = "解析中...";
+        analyzeData();
+    }
+
+    function analyzeData() {
+        // 1. 基本統計の計算
+        const n = rawResults.length;
+        const meanRaw = rawResults.reduce((a, b) => a + b, 0) / n;
+        const variance = rawResults.reduce((a, b) => a + Math.pow(b - meanRaw, 2), 0) / n;
+        const stdDev = Math.sqrt(variance);
+
+        // 2. 異常値（平均から±2σ外）をフィルタリング
+        const threshold = 2.0;
+        const filteredResults = rawResults.filter(val => Math.abs(val - meanRaw) <= threshold * stdDev);
+        const outlierCount = rawResults.length - filteredResults.length;
+
+        const finalMean = filteredResults.reduce((a, b) => a + b, 0) / filteredResults.length;
+
+        document.getElementById('statsSummary').innerHTML = `
+            <strong>全データ平均:</strong> ${meanRaw.toFixed(2)} ms<br>
+            <strong>標準偏差 (σ):</strong> ${stdDev.toFixed(2)} ms<br>
+            <strong>除外された異常値:</strong> ${outlierCount} 件 (±${threshold}σ外)<br>
+            <strong style="color:var(--success)">補正後平均:</strong> ${finalMean.toFixed(2)} ms
+        `;
+        
+        resultsDiv.style.display = 'block';
+        drawChart(rawResults, meanRaw, stdDev, threshold);
+    }
+
+    resetBtn.onclick = () => {
+        clearTimeout(timerId); isTestRunning = isWaiting = false;
+        statusText.innerText = "STARTを押して開始";
+        mainBtn.innerText = "START"; mainBtn.className = "main-button ready";
+        resultsDiv.style.display = 'none';
+    };
+
+    let chart = null;
+    function drawChart(data, mean, sd, t) {
+        if (chart) chart.destroy();
+        const ctx = document.getElementById('reactionChart').getContext('2d');
+        const colors = data.map(val => Math.abs(val - mean) <= t * sd ? 'rgba(34, 197, 94, 0.6)' : 'rgba(239, 68, 68, 0.6)');
+
+        chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.map((_, i) => i + 1),
+                datasets: [{ label: '反応速度 (ms)', data: data, backgroundColor: colors }]
+            },
+            options: {
+                plugins: { title: { display: true, text: '緑: 有効データ / 赤: 統計的異常値' } },
+                scales: { y: { title: { display: true, text: 'ms' } } }
+            }
+        });
+    }
+</script>
+</body>
+</html>
