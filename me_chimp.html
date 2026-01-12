@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>瞬間記憶タイムアタック</title>
+<title>瞬間記憶タイムアタック Pro</title>
 
 <style>
 body { 
@@ -12,7 +12,7 @@ body {
     background-color: #2c3e50; 
     color: white; 
     margin: 0; 
-    padding: 20px; 
+    padding: 10px; 
     user-select: none; 
     -webkit-user-select: none;
     touch-action: manipulation;
@@ -20,10 +20,30 @@ body {
 }
 
 .container { max-width: 500px; margin: 0 auto; }
-h1 { font-size: 1.5em; margin-bottom: 10px; }
+h1 { font-size: 1.5em; margin: 10px 0; color: #ecf0f1; }
+
+/* 設定セクション */
+.settings {
+    background: #34495e;
+    padding: 15px;
+    border-radius: 12px;
+    margin-bottom: 15px;
+    display: flex;
+    justify-content: space-around;
+    font-size: 0.9em;
+}
+.setting-item { display: flex; flex-direction: column; gap: 5px; }
+select {
+    padding: 5px;
+    border-radius: 5px;
+    border: none;
+    background: #ecf0f1;
+    font-weight: bold;
+}
+
 .stats { font-size: 1.2em; margin-bottom: 10px; font-weight: bold; }
 #timer { color: #f1c40f; }
-#instruction { height: 1.2em; color: #bdc3c7; margin-bottom: 10px; }
+#instruction { height: 1.2em; color: #bdc3c7; margin-bottom: 10px; font-weight: bold; }
 
 .game-board { 
     display: grid; 
@@ -33,44 +53,37 @@ h1 { font-size: 1.5em; margin-bottom: 10px; }
     padding: 8px;
     border-radius: 8px;
     margin-bottom: 20px;
-    touch-action: none;
 }
 
 .cell { 
     aspect-ratio: 1 / 1;
-    background: #ecf0f1;
+    background: rgba(236, 240, 241, 0.1); /* 初期状態は薄い枠のみ */
     border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.2em;
+    font-size: 1.1em;
     font-weight: 900; 
     color: #2c3e50;
     cursor: pointer;
-    transition: background 0.1s;
 }
 
+/* 数字があるセルの通常表示 */
+.cell.active { background: #ecf0f1; }
 .cell.hidden { color: transparent !important; background: #95a5a6; }
 .cell.cleared { visibility: hidden; }
+.cell.wrong { background: #e74c3c !important; color: white !important; box-shadow: 0 0 10px red; }
+.cell.correct-hint { background: #3498db !important; color: white !important; box-shadow: 0 0 12px #5dade2; }
 
-.cell.wrong { 
-    background: #e74c3c !important; 
-    color: white !important; 
-    box-shadow: 0 0 10px red;
-    z-index: 10;
-}
-
-/* ★正解だったはずのセル */
-.cell.correct-hint {
-    background: #3498db !important;
-    color: white !important;
-    box-shadow: 0 0 12px #5dade2;
-    z-index: 9;
+.btn-group {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
 }
 
 .start-btn { 
-    padding: 15px 40px; 
-    font-size: 1.2em; 
+    padding: 12px 30px; 
+    font-size: 1.1em; 
     cursor: pointer; 
     background: #27ae60; 
     color: white; 
@@ -80,12 +93,26 @@ h1 { font-size: 1.5em; margin-bottom: 10px; }
     box-shadow: 0 4px #1e8449;
 }
 .start-btn:active { transform: translateY(2px); box-shadow: 0 2px #1e8449; }
+.start-btn:disabled { background: #7f8c8d; box-shadow: 0 4px #95a5a6; opacity: 0.6; }
+
+.reset-btn {
+    padding: 12px 30px;
+    font-size: 1.1em;
+    cursor: pointer;
+    background: #e67e22;
+    color: white;
+    border: none;
+    border-radius: 50px;
+    font-weight: bold;
+    box-shadow: 0 4px #a05819;
+}
+.reset-btn:active { transform: translateY(2px); box-shadow: 0 2px #a05819; }
 
 #overlay {
     position: fixed; 
     top: 0; left: 0; 
     width: 100%; height: 100%;
-    background: rgba(0,0,0,0.85); 
+    background: rgba(0,0,0,0.9); 
     display: none; 
     flex-direction: column;
     align-items: center; 
@@ -99,80 +126,138 @@ h1 { font-size: 1.5em; margin-bottom: 10px; }
 
 <div class="container">
     <h1>瞬間記憶テスト</h1>
+
+    <div class="settings" id="settingsPanel">
+        <div class="setting-item">
+            <label>数字の数</label>
+            <select id="numCountSelect">
+                
+                <option value="4">4個</option>
+                <option value="5">5個</option>
+                <option value="6">6個</option>
+                <option value="7" selected>7個</option>
+                <option value="8">8個</option>
+                <option value="9">9個</option>
+                <option value="10">10個</option>
+                <option value="11">11個</option>
+                <option value="12">12個</option>
+                <option value="13">13個</option>
+            </select>
+        </div>
+        <div class="setting-item">
+            <label>記憶時間</label>
+            <select id="memoryTimeSelect">
+                <option value="500">0.5秒</option>
+                <option value="1000">1秒</option>
+                <option value="2000">2秒</option>
+                <option value="3000" selected>3秒</option>
+                <option value="5000">5秒</option>
+            </select>
+        </div>
+    </div>
+
     <div class="stats">Time: <span id="timer">0.00</span>s</div>
-    <div id="instruction">ボタンを押して開始！</div>
+    <div id="instruction">設定を選んでスタート！</div>
+    
     <div id="gameBoard" class="game-board"></div>
-    <button class="start-btn" onclick="initGame()">ゲーム開始</button>
+    
+    <div class="btn-group">
+        <button id="mainStartBtn" class="start-btn" onclick="initGame()">ゲーム開始</button>
+        <button id="resetBtn" class="reset-btn" onclick="resetGame()">リセット</button>
+    </div>
 </div>
 
 <div id="overlay">
     <h2 id="resultTitle">RESULT</h2>
     <p id="resultTime" style="font-size: 2em; font-weight: bold; margin: 20px 0;"></p>
-    <button class="start-btn" onclick="initGame()">もう一度挑戦</button>
+    <button class="start-btn" onclick="resetGame()">ホーム画面に戻る</button>
 </div>
 
 <script>
 const BOARD_SIZE = 100;
-const NUM_COUNT = 7;
-const MEMORY_TIME = 3000;
-
 let nextNumber = 1;
 let startTime = 0;
 let timerInterval = null;
 let isClickable = false;
-let finalTime = 0;
+let currentNumCount = 7;
+let gameActive = false;
 
-function initGame() {
+// 盤面の初期化
+function createEmptyBoard() {
     const board = document.getElementById('gameBoard');
-    const instruction = document.getElementById('instruction');
-    const overlay = document.getElementById('overlay');
-
     board.innerHTML = '';
-    overlay.style.display = 'none';
-    nextNumber = 1;
-    isClickable = false;
-    finalTime = 0;
-
-    clearInterval(timerInterval);
-    document.getElementById('timer').textContent = '0.00';
-
-    let positions = Array.from({length: BOARD_SIZE}, (_, i) => i);
-    positions.sort(() => Math.random() - 0.5);
-
-    let map = {};
-    for (let i = 1; i <= NUM_COUNT; i++) {
-        map[positions[i - 1]] = i;
-    }
-
     for (let i = 0; i < BOARD_SIZE; i++) {
         const div = document.createElement('div');
         div.className = 'cell';
+        board.appendChild(div);
+    }
+}
+createEmptyBoard();
 
+function resetGame() {
+    clearInterval(timerInterval);
+    gameActive = false;
+    isClickable = false;
+    document.getElementById('timer').textContent = '0.00';
+    document.getElementById('instruction').textContent = "設定を選んでスタート！";
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('mainStartBtn').disabled = false;
+    createEmptyBoard();
+}
+
+function initGame() {
+    if (gameActive) return;
+    gameActive = true;
+
+    const board = document.getElementById('gameBoard');
+    const instruction = document.getElementById('instruction');
+    const startBtn = document.getElementById('mainStartBtn');
+    
+    currentNumCount = parseInt(document.getElementById('numCountSelect').value);
+    const memoryTime = parseInt(document.getElementById('memoryTimeSelect').value);
+
+    board.innerHTML = '';
+    startBtn.disabled = true;
+    nextNumber = 1;
+    isClickable = false;
+
+    // 位置の計算
+    let positions = Array.from({length: BOARD_SIZE}, (_, i) => i);
+    positions.sort(() => Math.random() - 0.5);
+    let map = {};
+    for (let i = 1; i <= currentNumCount; i++) {
+        map[positions[i - 1]] = i;
+    }
+
+    // セルの描画
+    for (let i = 0; i < BOARD_SIZE; i++) {
+        const div = document.createElement('div');
+        div.className = 'cell';
         if (map[i]) {
             const val = map[i];
             div.textContent = val;
             div.id = `num-${val}`;
+            div.classList.add('active');
             div.onclick = () => handleCellClick(val, div);
         } else {
             div.style.background = 'transparent';
-            div.style.cursor = 'default';
         }
         board.appendChild(div);
     }
 
-    instruction.textContent = "数字を覚えてください...";
+    instruction.textContent = `数字を覚えてください... (${memoryTime/1000}秒)`;
 
+    // 指定時間後に伏せる
     setTimeout(() => {
-        document.querySelectorAll('.cell').forEach(el => {
-            if (el.textContent) el.classList.add('hidden');
+        if (!gameActive) return; // リセットされた場合は中断
+        document.querySelectorAll('.cell.active').forEach(el => {
+            el.classList.add('hidden');
         });
-
-        instruction.textContent = "1から順に叩け！";
+        instruction.textContent = "1から順にタップ！";
         isClickable = true;
         startTime = Date.now();
-
         timerInterval = setInterval(updateTimer, 10);
-    }, MEMORY_TIME);
+    }, memoryTime);
 }
 
 function updateTimer() {
@@ -186,10 +271,7 @@ function handleCellClick(num, element) {
     if (num === nextNumber) {
         element.classList.remove('hidden');
         element.classList.add('cleared');
-
-        if (nextNumber === NUM_COUNT) {
-            // ★最後のタップ瞬間でタイム確定
-            finalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        if (nextNumber === currentNumCount) {
             finishGame(true);
         } else {
             nextNumber++;
@@ -197,14 +279,11 @@ function handleCellClick(num, element) {
     } else {
         element.classList.remove('hidden');
         element.classList.add('wrong');
-
-        // ★正解だったはずの次の数字を表示
         const correct = document.getElementById(`num-${nextNumber}`);
         if (correct) {
             correct.classList.remove('hidden');
             correct.classList.add('correct-hint');
         }
-
         finishGame(false);
     }
 }
@@ -215,24 +294,23 @@ function finishGame(success) {
 
     const overlay = document.getElementById('overlay');
     const title = document.getElementById('resultTitle');
-    const time = document.getElementById('resultTime');
+    const timeDisp = document.getElementById('resultTime');
 
-    // 全数字を表示（答え合わせ）
-    document.querySelectorAll('.cell').forEach(el => {
-        if (el.textContent) el.classList.remove('hidden');
+    document.querySelectorAll('.cell.active').forEach(el => {
+        el.classList.remove('hidden');
     });
 
     setTimeout(() => {
+        if (!gameActive) return;
         overlay.style.display = 'flex';
-
         if (success) {
             title.textContent = "記憶完了！";
             title.style.color = "#2ecc71";
-            time.textContent = finalTime + "s";
+            timeDisp.textContent = document.getElementById('timer').textContent + "s";
         } else {
             title.textContent = "ミス！";
             title.style.color = "#e74c3c";
-            time.textContent = "次は頑張りましょう";
+            timeDisp.textContent = "残念...";
         }
     }, 800);
 }
@@ -241,13 +319,6 @@ function finishGame(success) {
 document.addEventListener('touchstart', e => {
     if (e.touches.length > 1) e.preventDefault();
 }, { passive: false });
-
-let lastTouchEnd = 0;
-document.addEventListener('touchend', e => {
-    const now = Date.now();
-    if (now - lastTouchEnd <= 300) e.preventDefault();
-    lastTouchEnd = now;
-}, false);
 </script>
 
 </body>
