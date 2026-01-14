@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>High-Density Beat Game</title>
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; background: #050505; font-family: sans-serif; color: white; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 0; width: 100%; pointer-events: none; z-index: 110; }
+        .header { display: flex; justify-content: space-between; padding: 10px; background: rgba(0,0,0,0.8); pointer-events: auto; border-bottom: 1px solid #333; }
+        .controls { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 11px; }
+        .row { display: flex; align-items: center; gap: 6px; }
+        .btn-reset { padding: 4px 10px; cursor: pointer; border-radius: 4px; border: none; background: #ff4444; color: white; font-weight: bold; }
+        .score-box { text-align: left; }
+        .timer-box { font-weight: bold; font-size: 18px; color: #ffeb3b; }
+        .combo-container { position: absolute; top: 40%; width: 100%; text-align: center; pointer-events: none;}
+        .combo-num { font-size: 60px; font-weight: 900; color: #fff; text-shadow: 0 0 20px #00e5ff; }
+        #timeBarContainer { width: 100%; height: 4px; background: #333; }
+        #timeBar { width: 100%; height: 100%; background: #00e5ff; transition: width 0.1s linear; }
+        .overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; flex-direction:column; justify-content:center; align-items:center; z-index: 100; pointer-events: auto; }
+        .start-btn { padding: 20px 60px; font-size: 32px; font-weight: bold; cursor: pointer; border-radius: 50px; border: none; background: #00e5ff; color: #000; box-shadow: 0 0 20px #00e5ff; }
+        #countdownText { font-size: 120px; font-weight: 900; color: #fff; text-shadow: 0 0 30px #00e5ff; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div class="header">
+            <div class="score-box">
+                <div>SCORE: <span id="scoreVal">0</span></div>
+                <div style="font-size: 11px; margin-top:6px;">
+                    LANES: <input type="range" id="laneSlider" min="2" max="6" value="4" style="width:60px; vertical-align:middle;"> 
+                    <span id="laneNumText" style="color:#00e5ff; font-weight:bold;">4</span>
+                </div>
+            </div>
+            <div class="controls">
+                <div class="row">
+                    <span id="timeText" class="timer-box">3:00</span>
+                    <button class="btn-reset" onclick="resetGame()">RESET</button>
+                </div>
+                <div class="row">
+                    SPEED:
+                    <label><input type="radio" name="speedMode" value="dynamic" checked>Dyn</label>
+                    <label><input type="radio" name="speedMode" value="fixed">Fix</label>
+                    <span style="margin-left:8px;">MODE:</span>
+                    <label><input type="radio" name="mode" value="normal" checked>Normal</label>
+                    <label><input type="radio" name="mode" value="death">Death</label>
+                </div>
+            </div>
+        </div>
+        <div id="timeBarContainer"><div id="timeBar"></div></div>
+        <div class="combo-container" id="comboGroup" style="display:none">
+            <div class="combo-num" id="comboVal">0</div>
+            <div style="font-size: 20px; letter-spacing: 5px;">COMBO</div>
+        </div>
+    </div>
+
+    <div id="startOverlay" class="overlay">
+        <button class="start-btn" onclick="startCountdown()">GAME START</button>
+    </div>
+    <div id="countdownOverlay" class="overlay" style="display: none; background:none; pointer-events:none;">
+        <div id="countdownText">3</div>
+    </div>
+    <div id="resultScreen" class="overlay" style="display:none;">
+        <h1 id="resTitle">FINISH!</h1>
+        <div style="font-size:80px; color:#00e5ff; margin-bottom: 20px;" id="finalScore">0</div>
+        <button onclick="resetGame()" class="start-btn" style="font-size: 20px;">BACK TO START</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('scoreVal');
+        const timeText = document.getElementById('timeText');
+        const timeBar = document.getElementById('timeBar');
+        const comboGroup = document.getElementById('comboGroup');
+        const comboVal = document.getElementById('comboVal');
+        const resultScreen = document.getElementById('resultScreen');
+        const finalScoreLabel = document.getElementById('finalScore');
+        const startOverlay = document.getElementById('startOverlay');
+        const countdownOverlay = document.getElementById('countdownOverlay');
+        const countdownText = document.getElementById('countdownText');
+
+        let audioCtx = null;
+        let COLS = 4;
+        let CIRCLE_RADIUS, JUDGE_Y, LANE_W, JUDGE_CIRCLE_SIZE;
+        const NOTE_COLOR = "#00e5ff";
+        const GAME_DURATION = 180;
+        const BPM = 130; 
+        const BEAT_INTERVAL = 60 / BPM; 
+
+        let notes = [], score = 0, combo = 0, isGameOver = true, isWaitingToStart = true, startTime = 0, lastBeatTime = 0, popups = [], laneFlashes = [];
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            LANE_W = canvas.width / COLS;
+            JUDGE_Y = canvas.height * 0.85;
+            CIRCLE_RADIUS = (LANE_W * 0.32);
+            JUDGE_CIRCLE_SIZE = CIRCLE_RADIUS * 1.25;
+            laneFlashes = new Array(COLS).fill(0);
+        }
+
+        document.getElementById('laneSlider').addEventListener('input', (e) => {
+            COLS = parseInt(e.target.value);
+            document.getElementById('laneNumText').innerText = COLS;
+            if (isWaitingToStart) resize(); else resetGame();
+        });
+
+        window.addEventListener('resize', resize);
+        resize();
+
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+
+        function resetGame() {
+            isGameOver = true; isWaitingToStart = true;
+            notes = []; score = 0; combo = 0; popups = [];
+            scoreDisplay.innerText = "0"; timeText.innerText = "3:00"; timeBar.style.width = "100%";
+            comboGroup.style.display = "none"; resultScreen.style.display = "none";
+            startOverlay.style.display = "flex";
+            resize();
+        }
+
+        function startCountdown() {
+            initAudio();
+            startOverlay.style.display = "none";
+            countdownOverlay.style.display = "flex";
+            let count = 3;
+            countdownText.innerText = count;
+            playSound(440, 0.1);
+            const timer = setInterval(() => {
+                count--;
+                if (count > 0) { countdownText.innerText = count; playSound(440, 0.1); }
+                else if (count === 0) { countdownText.innerText = "START!!"; playSound(880, 0.2); }
+                else { clearInterval(timer); countdownOverlay.style.display = "none"; actualStart(); }
+            }, 1000);
+        }
+
+        function actualStart() {
+            isGameOver = false; isWaitingToStart = false;
+            startTime = Date.now();
+            lastBeatTime = 0;
+        }
+
+        function playSound(freq, duration = 0.1) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.frequency.value = freq;
+            g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function handleInput(clientX, clientY) {
+            if (isGameOver || isWaitingToStart) return;
+            const colClicked = Math.floor(clientX / LANE_W);
+            if (colClicked < 0 || colClicked >= COLS) return;
+            laneFlashes[colClicked] = 10;
+            let target = null; let minD = Infinity;
+            for (let n of notes) {
+                if (!n.clicked && n.col === colClicked) {
+                    const d = Math.abs(n.y - JUDGE_Y);
+                    if (d < 100 && d < minD) { minD = d; target = n; }
+                }
+            }
+            if (target) { target.clicked = true; processHit(target, minD); }
+            else applyPenalty(clientX, JUDGE_Y);
+        }
+
+        function applyPenalty(x, y) {
+            if (document.querySelector('input[name="mode"]:checked').value === "death") { endGame("MISS / GAME OVER"); return; }
+            score = Math.max(0, score - 50);
+            scoreDisplay.innerText = score;
+            resetCombo(); playSound(100, 0.3);
+            popups.push({ x: x, y: y, text: "EMPTY TAP", color: "#ff4444", life: 40 });
+        }
+
+        function processHit(n, d) {
+            let res = "GOOD", basePts = 3, freq = 440;
+            if (d < 30) { res = "PERFECT"; basePts = 8; freq = 880; }
+            else if (d < 60) { res = "GREAT"; basePts = 5; freq = 660; }
+            else { res = "GOOD"; basePts = 3; freq = 440; }
+            
+            combo++;
+            const earnedPoints = basePts + (combo - 1);
+            score += earnedPoints;
+            
+            scoreDisplay.innerText = score;
+            comboVal.innerText = combo;
+            comboGroup.style.display = combo >= 2 ? "block" : "none";
+            playSound(freq);
+            popups.push({ x: n.x, y: n.y, text: res + " +" + earnedPoints, color: "#fff", life: 40 });
+        }
+
+        function resetCombo() { if (combo > 0) playSound(150, 0.2); combo = 0; comboGroup.style.display = "none"; }
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            for (let t of e.changedTouches) handleInput(t.clientX, t.clientY);
+        }, { passive: false });
+        canvas.addEventListener('mousedown', (e) => handleInput(e.clientX, e.clientY));
+
+        function update() {
+            ctx.fillStyle = "#050505"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+            for (let i = 0; i <= COLS; i++) { ctx.beginPath(); ctx.moveTo(i * LANE_W, 0); ctx.lineTo(i * LANE_W, canvas.height); ctx.stroke(); }
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+            ctx.beginPath(); ctx.moveTo(0, JUDGE_Y); ctx.lineTo(canvas.width, JUDGE_Y); ctx.stroke();
+
+            for (let i = 0; i < COLS; i++) {
+                const cx = LANE_W * i + LANE_W / 2;
+                if (laneFlashes[i] > 0) {
+                    ctx.fillStyle = `rgba(0, 229, 255, ${laneFlashes[i] / 25})`;
+                    ctx.beginPath(); ctx.arc(cx, JUDGE_Y, JUDGE_CIRCLE_SIZE + 5, 0, Math.PI * 2); ctx.fill();
+                    laneFlashes[i]--;
+                }
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.3)"; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.arc(cx, JUDGE_Y, JUDGE_CIRCLE_SIZE, 0, Math.PI * 2); ctx.stroke();
+            }
+
+            if (!isGameOver && !isWaitingToStart) {
+                const elapsed = (Date.now() - startTime) / 1000;
+                const remaining = Math.max(0, GAME_DURATION - elapsed);
+                timeText.innerText = `${Math.floor(remaining / 60)}:${Math.floor(remaining % 60).toString().padStart(2, '0')}`;
+                timeBar.style.width = (remaining / GAME_DURATION * 100) + "%";
+                if (remaining <= 0) endGame("FINISH!");
+
+                const speedMode = document.querySelector('input[name="speedMode"]:checked').value;
+                const speed = 6 + (speedMode === "dynamic" ? (score / 5000) : 0);
+
+                // 8分音符(BEAT_INTERVAL / 2)のタイミングで生成判定
+                if (elapsed - lastBeatTime > BEAT_INTERVAL / 2) {
+                    lastBeatTime = elapsed;
+                    // 出現確率を大幅アップ
+                    const spawnProb = Math.min(0.95, 0.55 + (score / 200000));
+                    if (Math.random() < spawnProb) {
+                        const c1 = Math.floor(Math.random() * COLS);
+                        notes.push({ x: LANE_W * c1 + LANE_W / 2, y: -CIRCLE_RADIUS, clicked: false, col: c1 });
+                        
+                        // 同時押し確率
+                        const multiProb = Math.min(0.5, 0.15 + (score / 150000));
+                        if (Math.random() < multiProb) {
+                            let c2 = (c1 + Math.floor(Math.random() * (COLS - 1)) + 1) % COLS;
+                            notes.push({ x: LANE_W * c2 + LANE_W / 2, y: -CIRCLE_RADIUS, clicked: false, col: c2 });
+                        }
+                    }
+                }
+
+                for (let i = notes.length - 1; i >= 0; i--) {
+                    let n = notes[i]; n.y += speed;
+                    if (!n.clicked) {
+                        ctx.fillStyle = NOTE_COLOR; ctx.beginPath(); ctx.arc(n.x, n.y, CIRCLE_RADIUS, 0, Math.PI * 2); ctx.fill();
+                    }
+                    if (n.y - CIRCLE_RADIUS > canvas.height) {
+                        if (!n.clicked) {
+                            if (document.querySelector('input[name="mode"]:checked').value === "death") endGame("MISS / GAME OVER");
+                            resetCombo();
+                        }
+                        notes.splice(i, 1);
+                    }
+                }
+            }
+
+            for (let i = popups.length - 1; i >= 0; i--) {
+                let p = popups[i]; p.y -= 2; p.life--;
+                ctx.save(); ctx.globalAlpha = p.life / 40;
+                ctx.fillStyle = p.color; ctx.font = "bold 24px Arial"; ctx.textAlign = "center";
+                ctx.fillText(p.text, p.x, p.y); ctx.restore();
+                if (p.life <= 0) popups.splice(i, 1);
+            }
+            requestAnimationFrame(update);
+        }
+
+        function endGame(msg) { isGameOver = true; document.getElementById('resTitle').innerText = msg; finalScoreLabel.innerText = score; resultScreen.style.display = "flex"; }
+        update();
+    </script>
+</body>
+</html>
