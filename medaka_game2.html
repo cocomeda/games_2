@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>メダカの試練 - Responsive Flow</title>
+    <title>メダカの試練 - Fin & Flow Edition</title>
     <style>
         body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; background: #000a0a; font-family: 'Avenir Next', 'Arial', sans-serif; color: white; }
         canvas { display: block; }
@@ -51,8 +51,7 @@
         <p style="color:#ffeb3b; font-weight:bold;">Adaptive Difficulty</p>
         <p style="width: 80%; text-align: center; color: #aaa; line-height: 1.6; font-size: 14px;">
             コンボで<b>「流速」</b>が上がり、<br>
-            スコアで餌が<b>「密集」</b>します。<br>
-            ※スタミナの減りは常に一定です。
+            スコアで餌が<b>「密集」</b>します。
         </p>
         <button class="start-btn" onclick="startCountdown()">泳ぎ始める</button>
     </div>
@@ -127,7 +126,7 @@
         function actualStart() {
             isGameOver = false; isWaitingToStart = false;
             startTime = Date.now();
-            lastBeatTime = 0;
+            lastBeatTime = -999; // 即座に1つ目の餌を生成
             energy = MAX_ENERGY;
             score = 0;
             combo = 0;
@@ -172,17 +171,13 @@
             let res = "NICE", gain = 75; 
             if (d < 40) { res = "PERFECT!"; gain = 115; }
             else if (d < 80) { res = "GOOD"; gain = 90; }
-            
             combo++;
-            // コンボが続くほど1個あたりの点数が高くなる
             const pts = Math.floor(gain * (1 + (combo / 30))); 
             score += pts;
-            
             energy = Math.min(MAX_ENERGY, energy + gain);
             scoreText.innerText = score.toLocaleString();
             document.getElementById('comboVal').innerText = combo;
             comboGroup.style.display = combo >= 2 ? "block" : "none";
-            
             playSound(440 + Math.min(combo * 4, 300), 0.1);
             popups.push({ x: n.x, y: n.y, text: res, color: "#00ffcc", life: 30 });
         }
@@ -195,18 +190,61 @@
             for (let t of e.changedTouches) handleInput(t.clientX, t.clientY);
         }, { passive: false });
 
+
+
+
+
+
+
+
+
+
+
+
+
+
         function drawMedaka(x, y, scale, flashFrame, laneIndex) {
             const offset = medakaOffsets[laneIndex];
             const freq = medakaFrequencies[laneIndex];
             const time = (Date.now() / 140) * freq + offset;
             const tailWag = Math.sin(time) * 0.45; 
+            const finWag = Math.sin(time * 0.2) * 0.3; // 胸ビレ用パタパタ
+            
             const jumpY = flashFrame > 0 ? Math.sin((20 - flashFrame) / 20 * Math.PI) * 25 : 0;
             ctx.save();
             ctx.translate(x, y - jumpY);
             ctx.rotate(-Math.PI / 2);
             ctx.rotate(tailWag * 0.15);
+            
             ctx.fillStyle = "#fff9c4";
             const headLen = scale * 1.8, headWidth = scale * 1.0;
+
+            // --- 胸ビレ (ひし形・後ろ向き) ---
+            ctx.save();
+            ctx.translate(headLen * 0.5, 0); 
+            // 右
+            ctx.save();
+            ctx.rotate(0.4 + finWag);
+            ctx.beginPath();
+            ctx.moveTo(0, headWidth * 0.8);
+            ctx.lineTo(-scale * 1.5, headWidth * 1.8);
+            ctx.lineTo(-scale * 0.5, headWidth * 0.8);
+            ctx.lineTo(0, headWidth * 0.5);
+            ctx.closePath(); ctx.fill();
+            ctx.restore();
+            // 左
+            ctx.save();
+            ctx.rotate(-0.4 - finWag);
+            ctx.beginPath();
+            ctx.moveTo(0, -headWidth * 0.8);
+            ctx.lineTo(-scale * 1.5, -headWidth * 1.8);
+            ctx.lineTo(-scale * 0.5, -headWidth * 0.8);
+            ctx.lineTo(0, -headWidth * 0.5);
+            ctx.closePath(); ctx.fill();
+            ctx.restore();
+            ctx.restore();
+
+            // --- 胴体 ---
             ctx.beginPath();
             ctx.moveTo(headLen, 0);
             ctx.quadraticCurveTo(headLen * 0.8, headWidth, 0, headWidth);
@@ -219,17 +257,17 @@
             ctx.quadraticCurveTo(-bodyLen * 0.4, headWidth * 1.1, tailBaseX, tailBaseY);
             ctx.quadraticCurveTo(-bodyLen * 0.4, -headWidth * 1.1, 0, -headWidth);
             ctx.fill();
+
+            // --- 尾ビレ ---
             ctx.save();
             ctx.translate(tailBaseX, tailBaseY);
             ctx.rotate(tailWag * 0.8);
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(-scale * 1.2, -scale * 0.4);
-            ctx.lineTo(-scale * 2.4, 0);
-            ctx.lineTo(-scale * 1.2, scale * 0.4);
-            ctx.closePath();
-            ctx.fill();
+            ctx.beginPath(); ctx.moveTo(0, 0);
+            ctx.lineTo(-scale * 1.2, -scale * 0.4); ctx.lineTo(-scale * 2.4, 0);
+            ctx.lineTo(-scale * 1.2, scale * 0.4); ctx.closePath(); ctx.fill();
             ctx.restore();
+
+            // --- 目 ---
             ctx.fillStyle = "#111";
             ctx.beginPath(); ctx.arc(headLen * 0.6, headWidth * 0.55, scale * 0.28, 0, Math.PI * 2); ctx.fill();
             ctx.beginPath(); ctx.arc(headLen * 0.6, -headWidth * 0.55, scale * 0.28, 0, Math.PI * 2); ctx.fill();
@@ -253,21 +291,14 @@
                 const remaining = Math.max(0, 180 - elapsed);
                 timeText.innerText = `${Math.floor(remaining / 60)}:${Math.floor(remaining % 60).toString().padStart(2, '0')}`;
                 
-                // --- 相対難易度ロジック ---
-                // 1. 速度：経過時間とコンボ数で決定
                 const timeFactor = 1 + (elapsed / 18000); 
                 const comboFactor = 1 + (combo / 1400);
-                const scoreFactor =  score/ 100000;               
-                 
                 const currentSpeed = (3.0 * timeFactor * comboFactor + comboFactor);
 
-                // 2. 密度（距離）：画面高に対する割合をスコアで決定
-                // 初期は高さの 25%、最大 3% まで密集
                 const currentDistRatio = Math.max(0.03, 0.25 - (score / 100000));
                 const targetDistance = canvas.height * currentDistRatio;
                 const spawnInterval = targetDistance / (currentSpeed * 60); 
 
-                // 3. スタミナ：常に一定
                 energy -= 0.4; 
                 energyBar.style.width = (energy / MAX_ENERGY * 100) + "%";
 
@@ -276,21 +307,18 @@
 
                 if (elapsed - lastBeatTime > spawnInterval) {
                     lastBeatTime = elapsed;
-                    let spawnCount = 0;
                     const spawnChance = 0.1 + (elapsed / 1200);
+                    let sc = 0;
                     for (let c = 0; c < COLS; c++) {
                         if (Math.random() < spawnChance) {
                             notes.push({ x: LANE_W * c + LANE_W / 2, y: -30, eaten: false, col: c });
-                            spawnCount++;
-                            if (spawnCount >= 2) break; 
+                            if (++sc >= 2) break;
                         }
                     }
                 }
 
                 for (let i = notes.length - 1; i >= 0; i--) {
-                    let n = notes[i];
-                    n.y += currentSpeed; 
-                    
+                    let n = notes[i]; n.y += currentSpeed; 
                     if (!n.eaten) {
                         ctx.fillStyle = "#ff4444";
                         ctx.beginPath(); ctx.arc(n.x, n.y, CIRCLE_RADIUS, 0, Math.PI * 2); ctx.fill();
