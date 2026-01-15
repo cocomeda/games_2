@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>メダカの試練 - Responsive Flow</title>
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; background: #000a0a; font-family: 'Avenir Next', 'Arial', sans-serif; color: white; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 0; width: 100%; pointer-events: none; z-index: 110; }
+        .top-info { display: flex; justify-content: space-between; align-items: flex-start; padding: 15px 20px; }
+        .stat-box { text-shadow: 0 0 10px rgba(0,255,204,0.8); }
+        .label { font-size: 12px; color: #00ffcc; letter-spacing: 1px; }
+        .value { font-size: 28px; font-weight: 900; font-variant-numeric: tabular-nums; }
+        .score-color { color: #ffeb3b; text-shadow: 0 0 10px rgba(255,235,59,0.5); }
+        .energy-wrapper { position: absolute; top: 85px; left: 20px; width: calc(100% - 40px); }
+        .energy-container { height: 12px; background: rgba(255,255,255,0.1); border-radius: 6px; overflow: hidden; border: 1px solid rgba(0,255,204,0.3); }
+        #energyBar { width: 100%; height: 100%; background: linear-gradient(90deg, #ff4444, #00ffcc); transition: width 0.1s linear; }
+        .combo-container { position: absolute; top: 40%; width: 100%; text-align: center; }
+        .combo-num { font-size: 80px; font-weight: 900; color: #ffeb3b; text-shadow: 0 0 20px #fbc02d; margin: 0; }
+        .combo-text { font-size: 20px; color: #ffeb3b; letter-spacing: 5px; margin-top: -10px; }
+        .overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,5,5,0.9); display:flex; flex-direction:column; justify-content:center; align-items:center; z-index: 100; pointer-events: auto; }
+        .start-btn { padding: 15px 40px; font-size: 20px; font-weight: bold; cursor: pointer; border-radius: 30px; border: none; background: #00ffcc; color: #000; box-shadow: 0 0 20px rgba(0,255,204,0.4); }
+        #countdownText { font-size: 120px; font-weight: 900; color: #00ffcc; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div class="top-info">
+            <div class="stat-box">
+                <div class="label">TIME</div>
+                <div id="timeText" class="value">3:00</div>
+            </div>
+            <div class="stat-box" style="text-align: right;">
+                <div class="label">SCORE</div>
+                <div id="scoreText" class="value score-color">0</div>
+            </div>
+        </div>
+        <div class="energy-wrapper">
+            <div class="label" style="margin-bottom: 4px;">STAMINA</div>
+            <div class="energy-container"><div id="energyBar"></div></div>
+        </div>
+        <div class="combo-container" id="comboGroup" style="display:none">
+            <div class="combo-num" id="comboVal">0</div>
+            <div class="combo-text">COMBO EAT</div>
+        </div>
+    </div>
+
+    <div id="startOverlay" class="overlay">
+        <h1 style="color:#00ffcc; margin-bottom:0;">メダカの試練</h1>
+        <p style="color:#ffeb3b; font-weight:bold;">Adaptive Difficulty</p>
+        <p style="width: 80%; text-align: center; color: #aaa; line-height: 1.6; font-size: 14px;">
+            コンボで<b>「流速」</b>が上がり、<br>
+            スコアで餌が<b>「密集」</b>します。<br>
+            ※スタミナの減りは常に一定です。
+        </p>
+        <button class="start-btn" onclick="startCountdown()">泳ぎ始める</button>
+    </div>
+
+    <div id="countdownOverlay" class="overlay" style="display: none; background:transparent;">
+        <div id="countdownText">3</div>
+    </div>
+
+    <div id="resultScreen" class="overlay" style="display:none;">
+        <h2 id="resTitle">結果</h2>
+        <div class="label" style="margin-top:20px;">FINAL SCORE</div>
+        <div style="font-size:80px; color:#ffeb3b;" id="finalScore">0</div>
+        <button onclick="location.reload()" class="start-btn" style="margin-top:30px;">もう一度挑戦</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const energyBar = document.getElementById('energyBar');
+        const scoreText = document.getElementById('scoreText');
+        const timeText = document.getElementById('timeText');
+        const comboGroup = document.getElementById('comboGroup');
+        const resultScreen = document.getElementById('resultScreen');
+        const finalScoreLabel = document.getElementById('finalScore');
+        const startOverlay = document.getElementById('startOverlay');
+
+        let audioCtx = null;
+        let COLS = 4;
+        let LANE_W, JUDGE_Y, CIRCLE_RADIUS;
+        const MAX_ENERGY = 1000;
+        
+        let notes = [], score = 0, energy = 1000, combo = 0, isGameOver = true, isWaitingToStart = true, startTime = 0, lastBeatTime = 0, popups = [], laneFlashes = [];
+        let medakaOffsets = [], medakaFrequencies = [];
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            LANE_W = canvas.width / COLS;
+            JUDGE_Y = canvas.height * 0.82;
+            CIRCLE_RADIUS = (LANE_W * 0.12);
+            laneFlashes = new Array(COLS).fill(0);
+            medakaOffsets = []; medakaFrequencies = [];
+            for(let i = 0; i < COLS; i++) {
+                medakaOffsets.push(Math.random() * Math.PI * 2);
+                medakaFrequencies.push(0.8 + Math.random() * 0.5);
+            }
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+
+        function startCountdown() {
+            initAudio();
+            startOverlay.style.display = "none";
+            document.getElementById('countdownOverlay').style.display = "flex";
+            let count = 3;
+            const timer = setInterval(() => {
+                count--;
+                if (count > 0) document.getElementById('countdownText').innerText = count;
+                else if (count === 0) document.getElementById('countdownText').innerText = "GO!";
+                else {
+                    clearInterval(timer);
+                    document.getElementById('countdownOverlay').style.display = "none";
+                    actualStart();
+                }
+            }, 1000);
+        }
+
+        function actualStart() {
+            isGameOver = false; isWaitingToStart = false;
+            startTime = Date.now();
+            lastBeatTime = 0;
+            energy = MAX_ENERGY;
+            score = 0;
+            combo = 0;
+            notes = [];
+            popups = [];
+            scoreText.innerText = "0";
+            comboGroup.style.display = "none";
+        }
+
+        function playSound(freq, duration = 0.1) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.frequency.value = freq;
+            g.gain.setValueAtTime(0.012, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function handleInput(clientX, clientY) {
+            if (isGameOver || isWaitingToStart) return;
+            const colClicked = Math.floor(clientX / LANE_W);
+            if (colClicked < 0 || colClicked >= COLS) return;
+            laneFlashes[colClicked] = 20; 
+            let target = null; let minD = Infinity;
+            for (let n of notes) {
+                if (!n.eaten && n.col === colClicked) {
+                    const d = Math.abs(n.y - JUDGE_Y);
+                    if (d < 130 && d < minD) { minD = d; target = n; }
+                }
+            }
+            if (target) { target.eaten = true; processHit(target, minD); }
+            else { 
+                energy -= 50; 
+                popups.push({ x: clientX, y: JUDGE_Y, text: "MISS!", color: "#ff4444", life: 40 });
+                resetCombo(); playSound(60, 0.2);
+            }
+        }
+
+        function processHit(n, d) {
+            let res = "NICE", gain = 75; 
+            if (d < 40) { res = "PERFECT!"; gain = 115; }
+            else if (d < 80) { res = "GOOD"; gain = 90; }
+            
+            combo++;
+            // コンボが続くほど1個あたりの点数が高くなる
+            const pts = Math.floor(gain * (1 + (combo / 30))); 
+            score += pts;
+            
+            energy = Math.min(MAX_ENERGY, energy + gain);
+            scoreText.innerText = score.toLocaleString();
+            document.getElementById('comboVal').innerText = combo;
+            comboGroup.style.display = combo >= 2 ? "block" : "none";
+            
+            playSound(440 + Math.min(combo * 4, 300), 0.1);
+            popups.push({ x: n.x, y: n.y, text: res, color: "#00ffcc", life: 30 });
+        }
+
+        function resetCombo() { combo = 0; comboGroup.style.display = "none"; }
+
+        canvas.addEventListener('mousedown', (e) => handleInput(e.clientX, e.clientY));
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            for (let t of e.changedTouches) handleInput(t.clientX, t.clientY);
+        }, { passive: false });
+
+        function drawMedaka(x, y, scale, flashFrame, laneIndex) {
+            const offset = medakaOffsets[laneIndex];
+            const freq = medakaFrequencies[laneIndex];
+            const time = (Date.now() / 140) * freq + offset;
+            const tailWag = Math.sin(time) * 0.45; 
+            const jumpY = flashFrame > 0 ? Math.sin((20 - flashFrame) / 20 * Math.PI) * 25 : 0;
+            ctx.save();
+            ctx.translate(x, y - jumpY);
+            ctx.rotate(-Math.PI / 2);
+            ctx.rotate(tailWag * 0.15);
+            ctx.fillStyle = "#fff9c4";
+            const headLen = scale * 1.8, headWidth = scale * 1.0;
+            ctx.beginPath();
+            ctx.moveTo(headLen, 0);
+            ctx.quadraticCurveTo(headLen * 0.8, headWidth, 0, headWidth);
+            ctx.lineTo(0, -headWidth);
+            ctx.quadraticCurveTo(headLen * 0.8, -headWidth, headLen, 0);
+            ctx.fill();
+            const bodyLen = scale * 4.8, tailBaseX = -bodyLen, tailBaseY = tailWag * scale * 0.7; 
+            ctx.beginPath();
+            ctx.moveTo(0, headWidth);
+            ctx.quadraticCurveTo(-bodyLen * 0.4, headWidth * 1.1, tailBaseX, tailBaseY);
+            ctx.quadraticCurveTo(-bodyLen * 0.4, -headWidth * 1.1, 0, -headWidth);
+            ctx.fill();
+            ctx.save();
+            ctx.translate(tailBaseX, tailBaseY);
+            ctx.rotate(tailWag * 0.8);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(-scale * 1.2, -scale * 0.4);
+            ctx.lineTo(-scale * 2.4, 0);
+            ctx.lineTo(-scale * 1.2, scale * 0.4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+            ctx.fillStyle = "#111";
+            ctx.beginPath(); ctx.arc(headLen * 0.6, headWidth * 0.55, scale * 0.28, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(headLen * 0.6, -headWidth * 0.55, scale * 0.28, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
+        function update() {
+            ctx.fillStyle = "#000d0d"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = "rgba(0, 255, 204, 0.1)";
+            const waveOffset = (Date.now() / 15) % 150;
+            for (let y = waveOffset; y < canvas.height; y += 150) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+            }
+            for (let i = 0; i < COLS; i++) {
+                drawMedaka(LANE_W * i + LANE_W / 2, JUDGE_Y, LANE_W * 0.12, laneFlashes[i], i);
+                if (laneFlashes[i] > 0) laneFlashes[i]--;
+            }
+
+            if (!isGameOver && !isWaitingToStart) {
+                const elapsed = (Date.now() - startTime) / 1000;
+                const remaining = Math.max(0, 180 - elapsed);
+                timeText.innerText = `${Math.floor(remaining / 60)}:${Math.floor(remaining % 60).toString().padStart(2, '0')}`;
+                
+                // --- 相対難易度ロジック ---
+                // 1. 速度：経過時間とコンボ数で決定
+                const timeFactor = 1 + (elapsed / 18000); 
+                const comboFactor = 1 + (combo / 1400);
+                const scoreFactor =  score/ 100000;               
+                 
+                const currentSpeed = (3.0 * timeFactor * comboFactor + comboFactor);
+
+                // 2. 密度（距離）：画面高に対する割合をスコアで決定
+                // 初期は高さの 25%、最大 3% まで密集
+                const currentDistRatio = Math.max(0.03, 0.25 - (score / 100000));
+                const targetDistance = canvas.height * currentDistRatio;
+                const spawnInterval = targetDistance / (currentSpeed * 60); 
+
+                // 3. スタミナ：常に一定
+                energy -= 0.4; 
+                energyBar.style.width = (energy / MAX_ENERGY * 100) + "%";
+
+                if (energy <= 0) endGame("力尽きて流された...");
+                if (remaining <= 0) endGame("激流を制した！");
+
+                if (elapsed - lastBeatTime > spawnInterval) {
+                    lastBeatTime = elapsed;
+                    let spawnCount = 0;
+                    const spawnChance = 0.1 + (elapsed / 1200);
+                    for (let c = 0; c < COLS; c++) {
+                        if (Math.random() < spawnChance) {
+                            notes.push({ x: LANE_W * c + LANE_W / 2, y: -30, eaten: false, col: c });
+                            spawnCount++;
+                            if (spawnCount >= 2) break; 
+                        }
+                    }
+                }
+
+                for (let i = notes.length - 1; i >= 0; i--) {
+                    let n = notes[i];
+                    n.y += currentSpeed; 
+                    
+                    if (!n.eaten) {
+                        ctx.fillStyle = "#ff4444";
+                        ctx.beginPath(); ctx.arc(n.x, n.y, CIRCLE_RADIUS, 0, Math.PI * 2); ctx.fill();
+                    }
+                    if (n.y > canvas.height) {
+                        if (!n.eaten) {
+                            energy -= 65; 
+                            popups.push({ x: n.x, y: JUDGE_Y, text: "MISS!", color: "#ff8800", life: 30 });
+                            resetCombo();
+                        }
+                        notes.splice(i, 1);
+                    }
+                }
+            }
+            for (let i = popups.length - 1; i >= 0; i--) {
+                let p = popups[i]; p.y -= 2; p.life--;
+                ctx.save(); ctx.globalAlpha = p.life / 30;
+                ctx.fillStyle = p.color; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center";
+                ctx.fillText(p.text, p.x, p.y); ctx.restore();
+                if (p.life <= 0) popups.splice(i, 1);
+            }
+            requestAnimationFrame(update);
+        }
+
+        function endGame(msg) { 
+            isGameOver = true; 
+            document.getElementById('resTitle').innerText = msg; 
+            document.getElementById('resTitle').style.color = (energy > 0) ? "#00ffcc" : "#ff4444";
+            finalScoreLabel.innerText = score.toLocaleString(); 
+            resultScreen.style.display = "flex"; 
+        }
+        update();
+    </script>
+</body>
+</html>
