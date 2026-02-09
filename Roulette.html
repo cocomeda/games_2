@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>豪華決定ルーレット</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --secondary: #ec4899;
+            --success: #22c55e;
+            --bg: #0f172a;
+        }
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .container {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(15px);
+            padding: 2rem;
+            border-radius: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            width: 90%;
+            max-width: 420px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
+            position: relative;
+            z-index: 10;
+        }
+
+        input {
+            width: 80%;
+            padding: 12px;
+            border-radius: 12px;
+            border: 2px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.2);
+            color: white;
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            outline: none;
+            transition: 0.3s;
+        }
+        input:focus { border-color: var(--primary); }
+
+        button {
+            cursor: pointer;
+            border: none;
+            border-radius: 12px;
+            font-weight: bold;
+            transition: 0.3s;
+            padding: 12px 24px;
+        }
+        .add-btn { background: var(--primary); color: white; width: 100%; margin-bottom: 0.5rem; }
+        .done-btn { background: transparent; color: #94a3b8; width: 100%; font-size: 0.9rem; }
+        .spin-btn { background: linear-gradient(45deg, var(--primary), var(--secondary)); color: white; width: 100%; font-size: 1.2rem; margin-top: 1.5rem; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4); }
+        .back-btn { background: rgba(255,255,255,0.05); color: white; margin-top: 1rem; width: 100%; }
+
+        /* 3Dドラム */
+        .stage {
+            perspective: 1200px;
+            width: 100%;
+            height: 120px;
+            position: relative;
+            margin: 2.5rem 0;
+            display: none;
+        }
+        .drum {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            transform-style: preserve-3d;
+            transition: transform 3.5s cubic-bezier(0.15, 0, 0.05, 1);
+        }
+        .option-face {
+            position: absolute;
+            width: 100%;
+            height: 60px;
+            left: 0;
+            top: 30px;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .highlight-bar {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 105%;
+            height: 70px;
+            border: 3px solid var(--secondary);
+            border-radius: 12px;
+            pointer-events: none;
+            z-index: 10;
+            box-shadow: 0 0 20px var(--secondary), inset 0 0 10px var(--secondary);
+        }
+
+        /* 決定時の輝きアニメーション */
+        @keyframes winner {
+            0%, 100% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.2); filter: brightness(1.5); color: #fff; text-shadow: 0 0 20px #fff; }
+        }
+        .win-effect { animation: winner 0.5s ease 3; }
+
+        /* 紙吹雪のキャンバス */
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="confetti-canvas"></canvas>
+
+<div class="container">
+    <div id="input-ui">
+        <h2>決定ルーレット</h2>
+        <input type="text" id="choice-input" placeholder="選択肢を入力..." autocomplete="off">
+        <button class="add-btn" onclick="addChoice()">追加して次の人へ</button>
+        <div style="font-size: 0.8rem; color: #94a3b8; margin: 10px 0;">登録数: <span id="count">0</span>件</div>
+        <button class="done-btn" onclick="initDrum()">全員入力完了</button>
+    </div>
+
+    <div id="roulette-ui" style="display: none;">
+        <h2 id="roulette-title">運命の瞬間...</h2>
+        <div class="stage">
+            <div class="highlight-bar" id="h-bar"></div>
+            <div id="drum" class="drum"></div>
+        </div>
+        <button id="spin-btn" class="spin-btn" onclick="spinDrum()">回す！</button>
+        <button id="back-btn" class="back-btn" onclick="resetAll()">← 最初からやり直す</button>
+    </div>
+</div>
+
+<script>
+    let choices = [];
+    let currentRotation = 0;
+
+    function addChoice() {
+        const input = document.getElementById('choice-input');
+        if (input.value.trim()) {
+            choices.push(input.value.trim());
+            input.value = "";
+            input.focus();
+            document.getElementById('count').innerText = choices.length;
+        }
+    }
+
+    function initDrum() {
+        if (choices.length < 2) { alert("2つ以上の選択肢が必要です！"); return; }
+        document.getElementById('input-ui').style.display = 'none';
+        document.getElementById('roulette-ui').style.display = 'block';
+        document.querySelector('.stage').style.display = 'block';
+        
+        const drum = document.getElementById('drum');
+        drum.innerHTML = '';
+        const angle = 360 / choices.length;
+        const radius = Math.max(100, Math.round(40 / Math.tan(Math.PI / choices.length)));
+
+        choices.forEach((text, i) => {
+            const face = document.createElement('div');
+            face.className = 'option-face';
+            face.innerText = text;
+            face.style.transform = `rotateX(${-angle * i}deg) translateZ(${radius}px)`;
+            drum.appendChild(face);
+        });
+    }
+
+    function spinDrum() {
+        const drum = document.getElementById('drum');
+        const btn = document.getElementById('spin-btn');
+        const hBar = document.getElementById('h-bar');
+        
+        btn.disabled = true;
+        const winnerIdx = Math.floor(Math.random() * choices.length);
+        const angle = 360 / choices.length;
+        
+        // 回転計算
+        currentRotation -= (360 * 5) + (winnerIdx * angle) - (currentRotation % 360);
+        drum.style.transform = `rotateX(${currentRotation}deg)`;
+
+        setTimeout(() => {
+            // 決定エフェクト
+            hBar.style.borderColor = "var(--success)";
+            hBar.style.boxShadow = "0 0 30px var(--success)";
+            const faces = document.querySelectorAll('.option-face');
+            faces[winnerIdx].classList.add('win-effect');
+            
+            startConfetti(); // 紙吹雪
+            
+            btn.disabled = false;
+            btn.innerText = "もう一度回す";
+        }, 3500);
+    }
+
+    function resetAll() {
+        choices = []; currentRotation = 0;
+        document.getElementById('count').innerText = "0";
+        document.getElementById('input-ui').style.display = 'block';
+        document.getElementById('roulette-ui').style.display = 'none';
+        document.getElementById('h-bar').style.borderColor = "var(--secondary)";
+        document.getElementById('h-bar').style.boxShadow = "0 0 20px var(--secondary)";
+    }
+
+    // --- 紙吹雪エフェクト ---
+    const canvas = document.getElementById('confetti-canvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    
+    function startConfetti() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        particles = [];
+        for (let i = 0; i < 100; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: -10,
+                size: Math.random() * 10 + 5,
+                color: `hsl(${Math.random() * 360}, 70%, 60%)`,
+                v: Math.random() * 5 + 2,
+                angle: Math.random() * 6
+            });
+        }
+        animateConfetti();
+    }
+
+    function animateConfetti() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach((p, i) => {
+            p.y += p.v;
+            p.x += Math.sin(p.angle) * 2;
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x, p.y, p.size, p.size);
+            if (p.y > canvas.height) particles.splice(i, 1);
+        });
+        if (particles.length > 0) requestAnimationFrame(animateConfetti);
+    }
+</script>
+
+</body>
+</html>
