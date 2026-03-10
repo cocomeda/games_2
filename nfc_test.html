@@ -3,142 +3,145 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NFC 順序カウンター</title>
+    <title>NFC 巡回カウンター</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f4f7f6; }
-        .container { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
-        .step { margin: 15px 0; padding: 10px; border: 2px dashed #ccc; border-radius: 10px; }
-        .active-step { border-color: #007bff; background: #e7f1ff; }
-        .progress-bar { height: 20px; background: #eee; border-radius: 10px; overflow: hidden; margin: 20px 0; }
-        #progress-fill { height: 100%; width: 0%; background: #28a745; transition: width 0.3s; }
-        #count-display { font-size: 3rem; font-weight: bold; color: #333; }
-        button { padding: 12px 24px; font-size: 1rem; border-radius: 25px; border: none; background: #007bff; color: white; cursor: pointer; margin: 10px; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; background: #f0f2f5; padding: 20px; }
+        .container { background: white; padding: 30px; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+        
+        /* 円形進捗バーのスタイル */
+        .progress-ring { position: relative; width: 200px; height: 200px; margin: 20px auto; }
+        .progress-ring svg { transform: rotate(-90deg); }
+        .progress-ring circle {
+            fill: transparent;
+            stroke-width: 15;
+            stroke-linecap: round;
+        }
+        .bg-circle { stroke: #e6e6e6; }
+        .fg-circle {
+            stroke: #007bff;
+            stroke-dasharray: 565.48; /* 周長: 2 * PI * 90 */
+            stroke-dashoffset: 565.48;
+            transition: stroke-dashoffset 0.5s ease;
+        }
+        .count-text {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 2.5rem; font-weight: bold;
+        }
+
+        .tag-list { text-align: left; background: #f8f9fa; padding: 10px; border-radius: 10px; margin-bottom: 20px; font-size: 0.8rem; }
+        button { background: #007bff; color: white; border: none; padding: 12px 25px; border-radius: 25px; font-weight: bold; cursor: pointer; margin: 5px; }
         button:disabled { background: #ccc; }
-        #status-msg { margin-top: 20px; color: #666; font-weight: bold; }
+        .setup-only { display: block; }
+        .play-only { display: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2 id="mode-title">1. タグ登録モード</h2>
-    
-    <div id="setup-area">
-        <div id="step1-box" class="step">1つ目のNFCを登録してください</div>
-        <div id="step2-box" class="step">2つ目のNFCを登録してください</div>
-        <button id="complete-setup" disabled>登録完了してスタート</button>
+    <h2 id="title">タグ登録モード</h2>
+
+    <div id="play-ui" class="play-only">
+        <div class="progress-ring">
+            <svg width="200" height="200">
+                <circle class="bg-circle" cx="100" cy="100" r="90"></circle>
+                <circle id="progress-bar" class="fg-circle" cx="100" cy="100" r="90"></circle>
+            </svg>
+            <div id="lap-display" class="count-text">0</div>
+        </div>
+        <p id="step-info">1番目のタグを待機中...</p>
     </div>
 
-    <div id="play-area" style="display:none;">
-        <div class="progress-bar"><div id="progress-fill"></div></div>
-        <p id="progress-text">進行状況: 0 / 2</p>
-        <div>合計周回数</div>
-        <div id="count-display">0</div>
+    <div id="setup-ui" class="setup-only">
+        <div class="tag-list" id="tag-list">登録されたタグ: なし</div>
+        <p>タグをかざすと順に登録されます</p>
+        <button id="finish-setup" disabled>登録完了（2個以上必要）</button>
     </div>
 
     <button id="start-nfc">NFCスキャン開始</button>
-    <p id="status-msg">上のボタンを押してください</p>
+    <p id="status">ボタンを押してください</p>
 </div>
 
 <script>
-    let registeredIds = []; // 0: 1つ目, 1: 2つ目
+    let registeredIds = [];
     let isSetupMode = true;
-    let currentPlayStep = 0;
+    let currentStep = 0;
     let lapCount = 0;
+    const circumference = 2 * Math.PI * 90;
 
     const startBtn = document.getElementById('start-nfc');
-    const completeBtn = document.getElementById('complete-setup');
-    const setupArea = document.getElementById('setup-area');
-    const playArea = document.getElementById('play-area');
-    const statusMsg = document.getElementById('status-msg');
-    const progressFill = document.getElementById('progress-fill');
-    const progressText = document.getElementById('progress-text');
-    const countDisplay = document.getElementById('count-display');
+    const finishBtn = document.getElementById('finish-setup');
+    const status = document.getElementById('status');
+    const progressBar = document.getElementById('progress-bar');
+    const lapDisplay = document.getElementById('lap-display');
+    const stepInfo = document.getElementById('step-info');
 
     startBtn.addEventListener('click', async () => {
         if (!('NDEFReader' in window)) {
-            statusMsg.innerText = "Web NFC非対応です";
+            status.innerText = "Web NFC非対応です";
             return;
         }
-
         try {
             const ndef = new NDEFReader();
             await ndef.scan();
-            statusMsg.innerText = isSetupMode ? "登録するタグをかざしてください" : "順番通りにタッチしてください";
             startBtn.style.display = 'none';
+            status.innerText = "スキャン待機中...";
 
             ndef.onreading = event => {
                 const tagId = event.serialNumber;
-
                 if (isSetupMode) {
-                    handleRegistration(tagId);
+                    handleSetup(tagId);
                 } else {
                     handlePlay(tagId);
                 }
             };
-        } catch (error) {
-            statusMsg.innerText = "エラー: " + error;
-        }
+        } catch (e) { status.innerText = "エラー: " + e; }
     });
 
-    // 登録ロジック
-    function handleRegistration(tagId) {
-        if (registeredIds.length === 0) {
-            registeredIds.push(tagId);
-            document.getElementById('step1-box').innerText = "✅ 1つ目完了: " + tagId;
-            document.getElementById('step1-box').classList.remove('active-step');
-            document.getElementById('step2-box').classList.add('active-step');
-            statusMsg.innerText = "次に2つ目のタグをかざしてください";
-        } else if (registeredIds.length === 1) {
-            if (tagId === registeredIds[0]) {
-                statusMsg.innerText = "⚠️ 違うタグをかざしてください";
-                return;
-            }
-            registeredIds.push(tagId);
-            document.getElementById('step2-box').innerText = "✅ 2つ目完了: " + tagId;
-            document.getElementById('step2-box').classList.remove('active-step');
-            completeBtn.disabled = false;
-            statusMsg.innerText = "登録完了！ボタンを押して開始";
+    function handleSetup(id) {
+        if (!registeredIds.includes(id)) {
+            registeredIds.push(id);
+            document.getElementById('tag-list').innerText = `登録済み(${registeredIds.length}個): ${registeredIds.join(', ')}`;
+            if (registeredIds.length >= 2) finishBtn.disabled = false;
+            status.innerText = `${registeredIds.length}個目を登録しました`;
+        } else {
+            status.innerText = "そのタグは既に登録済みです";
         }
     }
 
-    // 登録完了ボタン
-    completeBtn.addEventListener('click', () => {
+    finishBtn.addEventListener('click', () => {
         isSetupMode = false;
-        setupArea.style.display = 'none';
-        playArea.style.display = 'block';
-        document.getElementById('mode-title').innerText = "2. カウント中...";
-        statusMsg.innerText = "1つ目のタグから順にタッチ！";
+        document.getElementById('setup-ui').style.display = 'none';
+        document.getElementById('play-ui').style.display = 'block';
+        document.getElementById('title').innerText = "実行モード";
+        status.innerText = "順番にかざしてください";
         updateUI();
     });
 
-    // 実行ロジック
-    function handlePlay(tagId) {
-        const targetId = registeredIds[currentPlayStep];
-
-        if (tagId === targetId) {
-            currentPlayStep++;
-            statusMsg.innerText = "正解！";
-            
-            if (currentPlayStep >= registeredIds.length) {
+    function handlePlay(id) {
+        if (id === registeredIds[currentStep]) {
+            currentStep++;
+            if (currentStep >= registeredIds.length) {
                 lapCount++;
-                currentPlayStep = 0;
-                statusMsg.innerText = "1周達成！";
-                // 達成感のための簡単な音やバイブ（任意）
-                if (navigator.vibrate) navigator.vibrate(100);
+                currentStep = 0;
+                if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // 完了バイブ
             }
+            status.innerText = "OK!";
         } else {
-            statusMsg.innerText = "順番が違います！" + (currentPlayStep + 1) + "番目をかざして";
+            status.innerText = "順番が違います！";
+            if (navigator.vibrate) navigator.vibrate(300); // 失敗バイブ
         }
         updateUI();
     }
 
     function updateUI() {
-        const percent = (currentPlayStep / registeredIds.length) * 100;
-        progressFill.style.width = percent + "%";
-        progressText.innerText = `進行状況: ${currentPlayStep} / ${registeredIds.length}`;
-        countDisplay.innerText = lapCount;
+        // 円形進捗の計算
+        const progress = currentStep / registeredIds.length;
+        const offset = circumference - (progress * circumference);
+        progressBar.style.strokeDashoffset = offset;
+        
+        lapDisplay.innerText = lapCount;
+        stepInfo.innerText = `${currentStep + 1} / ${registeredIds.length} 個目を待機中`;
     }
 </script>
-
 </body>
 </html>
