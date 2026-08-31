@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>瞬間記憶タイムアタック Pro</title>
+<title>瞬間記憶テスト Pro</title>
 
 <style>
 body { 
@@ -41,9 +41,7 @@ select {
     font-weight: bold;
 }
 
-.stats { font-size: 1.2em; margin-bottom: 10px; font-weight: bold; }
-#timer { color: #f1c40f; }
-#instruction { height: 1.2em; color: #bdc3c7; margin-bottom: 10px; font-weight: bold; }
+#instruction { height: 1.2em; color: #bdc3c7; margin-bottom: 15px; font-weight: bold; font-size: 1.1em; }
 
 .game-board { 
     display: grid; 
@@ -108,16 +106,48 @@ select {
 }
 .reset-btn:active { transform: translateY(2px); box-shadow: 0 2px #a05819; }
 
+/* リザルトオーバーレイ */
 #overlay {
     position: fixed; 
     top: 0; left: 0; 
     width: 100%; height: 100%;
-    background: rgba(0,0,0,0.9); 
+    background: rgba(0,0,0,0.85); 
     display: none; 
     flex-direction: column;
     align-items: center; 
     justify-content: center; 
     z-index: 100;
+}
+
+/* 正解・不正解時の大きなマーク表示 */
+.result-icon {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 80px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.result-icon.success {
+    border: 8px solid #2ecc71;
+    color: #2ecc71;
+    box-shadow: 0 0 20px rgba(46, 204, 113, 0.4);
+}
+
+.result-icon.failure {
+    border: 8px solid #e74c3c;
+    color: #e74c3c;
+    box-shadow: 0 0 20px rgba(231, 76, 60, 0.4);
+}
+
+@keyframes popIn {
+    0% { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
 }
 </style>
 </head>
@@ -131,7 +161,6 @@ select {
         <div class="setting-item">
             <label>数字の数</label>
             <select id="numCountSelect">
-                
                 <option value="4">4個</option>
                 <option value="5">5個</option>
                 <option value="6">6個</option>
@@ -147,7 +176,7 @@ select {
         <div class="setting-item">
             <label>記憶時間</label>
             <select id="memoryTimeSelect">
-            <option value="200">0.2秒</option>
+                <option value="200">0.2秒</option>
                 <option value="300">0.3秒</option>
                 <option value="500">0.5秒</option>
                 <option value="1000">1秒</option>
@@ -158,11 +187,10 @@ select {
         </div>
     </div>
 
-    <div class="stats">Time: <span id="timer">0.00</span>s</div>
     <div id="instruction">設定を選んでスタート！</div>
-    
+
     <div id="gameBoard" class="game-board"></div>
-    
+
     <div class="btn-group">
         <button id="mainStartBtn" class="start-btn" onclick="initGame()">ゲーム開始</button>
         <button id="resetBtn" class="reset-btn" onclick="resetGame()">リセット</button>
@@ -170,16 +198,15 @@ select {
 </div>
 
 <div id="overlay">
-    <h2 id="resultTitle">RESULT</h2>
-    <p id="resultTime" style="font-size: 2em; font-weight: bold; margin: 20px 0;"></p>
-    <button class="start-btn" onclick="resetGame()">ホーム画面に戻る</button>
+    <!-- 大きな正解/不正解アイコン -->
+    <div id="resultIcon" class="result-icon"></div>
+    <h2 id="resultTitle" style="font-size: 2em; margin: 10px 0;">RESULT</h2>
+    <button class="start-btn" style="margin-top: 20px;" onclick="resetGame()">もう一度遊ぶ</button>
 </div>
 
 <script>
 const BOARD_SIZE = 100;
 let nextNumber = 1;
-let startTime = 0;
-let timerInterval = null;
 let isClickable = false;
 let currentNumCount = 7;
 let gameActive = false;
@@ -197,10 +224,8 @@ function createEmptyBoard() {
 createEmptyBoard();
 
 function resetGame() {
-    clearInterval(timerInterval);
     gameActive = false;
     isClickable = false;
-    document.getElementById('timer').textContent = '0.00';
     document.getElementById('instruction').textContent = "設定を選んでスタート！";
     document.getElementById('overlay').style.display = 'none';
     document.getElementById('mainStartBtn').disabled = false;
@@ -214,7 +239,7 @@ function initGame() {
     const board = document.getElementById('gameBoard');
     const instruction = document.getElementById('instruction');
     const startBtn = document.getElementById('mainStartBtn');
-    
+
     currentNumCount = parseInt(document.getElementById('numCountSelect').value);
     const memoryTime = parseInt(document.getElementById('memoryTimeSelect').value);
 
@@ -257,14 +282,7 @@ function initGame() {
         });
         instruction.textContent = "1から順にタップ！";
         isClickable = true;
-        startTime = Date.now();
-        timerInterval = setInterval(updateTimer, 10);
     }, memoryTime);
-}
-
-function updateTimer() {
-    const t = (Date.now() - startTime) / 1000;
-    document.getElementById('timer').textContent = t.toFixed(2);
 }
 
 function handleCellClick(num, element) {
@@ -292,11 +310,10 @@ function handleCellClick(num, element) {
 
 function finishGame(success) {
     isClickable = false;
-    clearInterval(timerInterval);
 
     const overlay = document.getElementById('overlay');
     const title = document.getElementById('resultTitle');
-    const timeDisp = document.getElementById('resultTime');
+    const icon = document.getElementById('resultIcon');
 
     document.querySelectorAll('.cell.active').forEach(el => {
         el.classList.remove('hidden');
@@ -305,16 +322,22 @@ function finishGame(success) {
     setTimeout(() => {
         if (!gameActive) return;
         overlay.style.display = 'flex';
+        
+        // アイコンクラスの再設定
+        icon.className = 'result-icon';
+        
         if (success) {
-            title.textContent = "記憶完了！";
+            icon.classList.add('success');
+            icon.textContent = "〇"; // 大きな丸を表示
+            title.textContent = "正解！PERFECT";
             title.style.color = "#2ecc71";
-            timeDisp.textContent = document.getElementById('timer').textContent + "s";
         } else {
-            title.textContent = "ミス！";
+            icon.classList.add('failure');
+            icon.textContent = "✕"; // 大きなバツを表示
+            title.textContent = "残念...不正解";
             title.style.color = "#e74c3c";
-            timeDisp.textContent = "残念...";
         }
-    }, 800);
+    }, 600);
 }
 
 /* ズーム防止 */
