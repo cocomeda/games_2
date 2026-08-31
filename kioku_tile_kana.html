@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ひらがな記憶ゲーム</title>
+  <style>
+    :root {
+      --bg-color: #f4f6f8;
+      --card-bg: #ffffff;
+      --text-main: #1a202c;
+      --text-sub: #718096;
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --correct: #10b981;
+      --wrong: #ef4444;
+      --hidden-bg: #cbd5e1;
+      --radius: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+      position: relative;
+    }
+
+    /* 右上：枠なしスコア表示 */
+    #score-board {
+      position: absolute;
+      top: 20px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      text-align: right;
+      user-select: none;
+    }
+
+    .score-item {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-sub);
+    }
+
+    .score-item span {
+      color: var(--primary);
+      font-size: 1.4rem;
+      font-weight: 800;
+      margin-left: 6px;
+    }
+
+    /* 上部：大型設定パネル */
+    header {
+      width: 100%;
+      max-width: 640px;
+      background: var(--card-bg);
+      padding: 20px;
+      border-radius: var(--radius);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+      margin-top: 60px;
+      margin-bottom: 24px;
+    }
+
+    .settings-group {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .setting-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .setting-item select {
+      padding: 8px 16px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: var(--primary);
+      background-color: var(--bg-color);
+      border: 2px solid #cbd5e1;
+      border-radius: 12px;
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.2s, background-color 0.2s;
+    }
+
+    .setting-item select:focus {
+      border-color: var(--primary);
+      background-color: #ffffff;
+    }
+
+    /* メインエリア */
+    main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 640px;
+    }
+
+    /* メッセージ表示 */
+    #info-container {
+      text-align: center;
+      margin-bottom: 20px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #info {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: var(--text-main);
+    }
+
+    /* 盤面 */
+    #grid {
+      display: grid;
+      gap: 16px;
+      width: 100%;
+      max-width: 460px;
+      aspect-ratio: 1;
+    }
+
+    /* マス目 */
+    .cell {
+      background-color: var(--card-bg);
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(3rem, 10vw, 4.2rem);
+      font-weight: 900;
+      color: var(--text-main);
+      cursor: pointer;
+      user-select: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      transition: transform 0.15s ease, background-color 0.2s, color 0.2s;
+    }
+
+    .cell:hover:not(.hidden) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+    }
+
+    .cell:active:not(.hidden) {
+      transform: translateY(0);
+    }
+
+    /* 状態表示 */
+    .cell.hidden {
+      background-color: var(--hidden-bg);
+      color: transparent;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    .cell.correct {
+      background-color: var(--correct) !important;
+      color: #ffffff !important;
+      transform: scale(1.03);
+    }
+
+    .cell.wrong {
+      background-color: var(--wrong) !important;
+      color: #ffffff !important;
+    }
+
+    /* スタートボタン */
+    #start-btn {
+      margin-top: 32px;
+      padding: 16px 48px;
+      font-size: 1.3rem;
+      font-weight: 800;
+      background-color: var(--primary);
+      color: #ffffff;
+      border: none;
+      border-radius: 40px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+      transition: background-color 0.2s, transform 0.15s;
+    }
+
+    #start-btn:hover {
+      background-color: var(--primary-hover);
+      transform: translateY(-2px);
+    }
+
+    #start-btn:active {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <div id="score-board">
+    <div class="score-item">累積ポイント<span id="points-display">0</span></div>
+    <div class="score-item">連続成功<span id="streak-display">0</span></div>
+  </div>
+
+  <header>
+    <div class="settings-group">
+      <div class="setting-item">
+        <label for="grid-size">マス:</label>
+        <select id="grid-size">
+          <option value="4" selected>2 × 2</option>
+          <option value="9">3 × 3</option>
+          <option value="16">4 × 4</option>
+        </select>
+      </div>
+
+      <div class="setting-item">
+        <label for="show-time">表示:</label>
+        <select id="show-time">
+          <option value="0.5">0.5秒</option>
+          <option value="1.0">1.0秒</option>
+          <option value="1.5" selected>1.5秒</option>
+          <option value="2.0">2.0秒</option>
+          <option value="3.0">3.0秒</option>
+        </select>
+      </div>
+
+      <div class="setting-item">
+        <label for="hide-time">伏せる:</label>
+        <select id="hide-time">
+          <option value="0.5">0.5秒</option>
+          <option value="1.0" selected>1.0秒</option>
+          <option value="1.5">1.5秒</option>
+          <option value="2.0">2.0秒</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="info-container">
+      <div id="info">スタートを押してください</div>
+    </div>
+
+    <div id="grid"></div>
+
+    <button id="start-btn" onclick="startGame()">スタート</button>
+  </main>
+
+  <script>
+    const gridElement = document.getElementById('grid');
+    const info = document.getElementById('info');
+    const pointsDisplay = document.getElementById('points-display');
+    const streakDisplay = document.getElementById('streak-display');
+    const startBtn = document.getElementById('start-btn');
+
+    // 清濁音を除く基本のひら仮名（あ〜ん）
+    const HIRAGANA = 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん'.split('');
+
+    let currentChars = [];
+    let correctChar = null;
+    let isClickable = false;
+    
+    // スコア管理
+    let totalPoints = 0;
+    let currentStreak = 0;
+
+    let totalCells = 4;
+    let showTimeMs = 1500;
+    let hideTimeMs = 1000;
+
+    function getRandomChar(excludeList = []) {
+      const available = HIRAGANA.filter(char => !excludeList.includes(char));
+      return available[Math.floor(Math.random() * available.length)];
+    }
+
+    function shuffle(array) {
+      return array.sort(() => Math.random() - 0.5);
+    }
+
+    function setupGrid() {
+      totalCells = parseInt(document.getElementById('grid-size').value);
+      showTimeMs = parseFloat(document.getElementById('show-time').value) * 1000;
+      hideTimeMs = parseFloat(document.getElementById('hide-time').value) * 1000;
+
+      const cols = Math.sqrt(totalCells);
+      gridElement.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      gridElement.style.gridTemplateRows = `repeat(${cols}, 1fr)`;
+
+      gridElement.innerHTML = '';
+      for (let i = 0; i < totalCells; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.onclick = () => checkAnswer(i);
+        gridElement.appendChild(cell);
+      }
+    }
+
+    function startGame() {
+      setupGrid();
+      
+      currentStreak = 0;
+      updateScoreBoard();
+      
+      startBtn.style.display = 'none';
+      
+      currentChars = [];
+      while (currentChars.length < totalCells) {
+        const char = getRandomChar(currentChars);
+        currentChars.push(char);
+      }
+      
+      nextTurn();
+    }
+
+    function updateScoreBoard() {
+      pointsDisplay.textContent = totalPoints;
+      streakDisplay.textContent = currentStreak;
+    }
+
+    function nextTurn() {
+      isClickable = false;
+      info.textContent = "覚えてください";
+
+      const cells = document.querySelectorAll('.cell');
+      cells.forEach((cell, index) => {
+        cell.className = 'cell';
+        cell.textContent = currentChars[index];
+      });
+
+      setTimeout(() => {
+        info.textContent = "考え中...";
+        cells.forEach(cell => cell.classList.add('hidden'));
+
+        setTimeout(() => {
+          updateBoard();
+        }, hideTimeMs);
+
+      }, showTimeMs);
+    }
+
+    function updateBoard() {
+      const cells = document.querySelectorAll('.cell');
+
+      correctChar = currentChars[Math.floor(Math.random() * totalCells)];
+
+      const newChars = [correctChar];
+      while (newChars.length < totalCells) {
+        const char = getRandomChar([...currentChars, ...newChars]);
+        newChars.push(char);
+      }
+
+      currentChars = shuffle(newChars);
+
+      cells.forEach((cell, index) => {
+        cell.textContent = currentChars[index];
+        cell.classList.remove('hidden');
+      });
+
+      info.textContent = "残っている文字は？";
+      isClickable = true;
+    }
+
+    function checkAnswer(index) {
+      if (!isClickable) return;
+
+      const cells = document.querySelectorAll('.cell');
+      const selectedChar = cells[index].textContent;
+
+      if (selectedChar === correctChar) {
+        totalPoints += 1;
+        currentStreak += 1;
+        updateScoreBoard();
+
+        info.textContent = "正解！";
+        isClickable = false;
+        cells[index].classList.add('correct');
+        setTimeout(nextTurn, 900);
+      } else {
+        currentStreak = 0;
+        updateScoreBoard();
+
+        isClickable = false;
+        info.textContent = `正解は【 ${correctChar} 】でした`;
+        
+        cells.forEach(cell => {
+          const char = cell.textContent;
+          if (char === correctChar) {
+            cell.classList.add('correct');
+          } else if (char === selectedChar) {
+            cell.classList.add('wrong');
+          }
+        });
+
+        startBtn.textContent = "もう一度プレイ";
+        startBtn.style.display = 'inline-block';
+      }
+    }
+
+    // 初期表示
+    setupGrid();
+  </script>
+</body>
+</html>
