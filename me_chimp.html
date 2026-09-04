@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>瞬間記憶テスト Pro</title>
 
+<!-- Chart.js 読み込み -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
 body { 
     font-family: 'Helvetica Neue', Arial, sans-serif; 
@@ -16,18 +19,18 @@ body {
     user-select: none; 
     -webkit-user-select: none;
     touch-action: manipulation;
-    overflow: hidden; 
+    overflow-y: auto; 
 }
 
-.container { max-width: 500px; margin: 0 auto; }
+.container { max-width: 500px; margin: 0 auto; padding-bottom: 20px; }
 h1 { font-size: 1.5em; margin: 10px 0; color: #ecf0f1; }
 
-/* 設定セクション */
+/* 設定・ステータスセクション */
 .settings {
     background: #34495e;
     padding: 15px;
     border-radius: 12px;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
     display: flex;
     justify-content: space-around;
     font-size: 0.9em;
@@ -41,21 +44,35 @@ select {
     font-weight: bold;
 }
 
+/* 進行ステータス表示 */
+.session-info {
+    background: #2c3e50;
+    border: 1px solid #4a6278;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9em;
+}
+.session-count { font-weight: bold; color: #f1c40f; }
+
 #instruction { height: 1.2em; color: #bdc3c7; margin-bottom: 15px; font-weight: bold; font-size: 1.1em; }
 
 .game-board { 
     display: grid; 
-    grid-template-columns: repeat(10, 1fr); 
+    grid-template-columns: repeat(8, 1fr); 
     gap: 4px; 
     background: #34495e;
     padding: 8px;
     border-radius: 8px;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
 }
 
 .cell { 
     aspect-ratio: 1 / 1;
-    background: rgba(236, 240, 241, 0.1); /* 初期状態は薄い枠のみ */
+    background: rgba(236, 240, 241, 0.1);
     border-radius: 4px;
     display: flex;
     align-items: center;
@@ -66,48 +83,60 @@ select {
     cursor: pointer;
 }
 
-/* 数字があるセルの通常表示 */
 .cell.active { background: #ecf0f1; }
 .cell.hidden { color: transparent !important; background: #95a5a6; }
 .cell.cleared { visibility: hidden; }
 .cell.wrong { background: #e74c3c !important; color: white !important; box-shadow: 0 0 10px red; }
 .cell.correct-hint { background: #3498db !important; color: white !important; box-shadow: 0 0 12px #5dade2; }
 
-.btn-group {
+/* ボタンエリアのレイアウト調整 */
+.btn-container {
     display: flex;
+    flex-direction: column;
     gap: 10px;
-    justify-content: center;
+    align-items: center;
 }
 
-.start-btn { 
-    padding: 12px 30px; 
-    font-size: 1.1em; 
+.btn-group {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.btn { 
+    padding: 10px 20px; 
+    font-size: 0.95em; 
     cursor: pointer; 
-    background: #27ae60; 
     color: white; 
     border: none; 
     border-radius: 50px; 
     font-weight: bold;
+    transition: background 0.2s, transform 0.1s;
+}
+.btn:active { transform: translateY(2px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ゲーム開始ボタン専用スタイル */
+#mainStartBtn {
+    width: 100%;
+    max-width: 320px;
+    padding: 14px 24px;
+    font-size: 1.15em;
+    border-radius: 8px;
+    background: #27ae60;
     box-shadow: 0 4px #1e8449;
 }
-.start-btn:active { transform: translateY(2px); box-shadow: 0 2px #1e8449; }
-.start-btn:disabled { background: #7f8c8d; box-shadow: 0 4px #95a5a6; opacity: 0.6; }
 
-.reset-btn {
-    padding: 12px 30px;
-    font-size: 1.1em;
-    cursor: pointer;
-    background: #e67e22;
-    color: white;
-    border: none;
-    border-radius: 50px;
-    font-weight: bold;
-    box-shadow: 0 4px #a05819;
-}
-.reset-btn:active { transform: translateY(2px); box-shadow: 0 2px #a05819; }
+.reset-btn { background: #e67e22; box-shadow: 0 4px #a05819; }
+.clear-btn { background: #c0392b; box-shadow: 0 4px #962d22; font-size: 0.8em; padding: 8px 14px; }
+.stats-btn { background: #2980b9; box-shadow: 0 4px #1c5980; }
+.export-btn { background: #8e44ad; box-shadow: 0 4px #512e5f; font-size: 0.85em; padding: 8px 14px; }
+.import-btn { background: #16a085; box-shadow: 0 4px #0e6655; font-size: 0.85em; padding: 8px 14px; }
 
-/* リザルトオーバーレイ */
-#overlay {
+/* モーダル・オーバーレイ */
+.modal-overlay {
     position: fixed; 
     top: 0; left: 0; 
     width: 100%; height: 100%;
@@ -117,32 +146,65 @@ select {
     align-items: center; 
     justify-content: center; 
     z-index: 100;
+    overflow-y: auto;
+    padding: 20px 10px;
+    box-sizing: border-box;
 }
 
-/* 正解・不正解時の大きなマーク表示 */
 .result-icon {
-    width: 120px;
-    height: 120px;
+    width: 100px;
+    height: 100px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 80px;
+    font-size: 70px;
     font-weight: bold;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
     animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .result-icon.success {
-    border: 8px solid #2ecc71;
+    border: 6px solid #2ecc71;
     color: #2ecc71;
     box-shadow: 0 0 20px rgba(46, 204, 113, 0.4);
 }
 
 .result-icon.failure {
-    border: 8px solid #e74c3c;
+    border: 6px solid #e74c3c;
     color: #e74c3c;
     box-shadow: 0 0 20px rgba(231, 76, 60, 0.4);
+}
+
+.stats-container {
+    background: #34495e;
+    border-radius: 12px;
+    padding: 15px;
+    width: 95%;
+    max-width: 500px;
+    box-sizing: border-box;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.stats-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 15px;
+    background: #2c3e50;
+    padding: 10px;
+    border-radius: 8px;
+}
+.stat-box { display: flex; flex-direction: column; align-items: center; }
+.stat-val { font-size: 1.1em; font-weight: bold; color: #f39c12; }
+.stat-lbl { font-size: 0.7em; color: #bdc3c7; }
+
+.chart-wrapper {
+    position: relative;
+    height: 220px;
+    width: 100%;
+    margin-bottom: 15px;
 }
 
 @keyframes popIn {
@@ -159,12 +221,12 @@ select {
 
     <div class="settings" id="settingsPanel">
         <div class="setting-item">
-            <label>数字の数</label>
-            <select id="numCountSelect">
+            <label for="numCountSelect">数字の数</label>
+            <select id="numCountSelect" onchange="onSettingChange()">
                 <option value="4">4個</option>
-                <option value="5">5個</option>
+                <option value="5" selected>5個</option>
                 <option value="6">6個</option>
-                <option value="7" selected>7個</option>
+                <option value="7">7個</option>
                 <option value="8">8個</option>
                 <option value="9">9個</option>
                 <option value="10">10個</option>
@@ -174,44 +236,156 @@ select {
             </select>
         </div>
         <div class="setting-item">
-            <label>記憶時間</label>
-            <select id="memoryTimeSelect">
-                <option value="200">0.2秒</option>
-                <option value="300">0.3秒</option>
-                <option value="500">0.5秒</option>
-                <option value="1000">1秒</option>
-                <option value="2000">2秒</option>
-                <option value="3000" selected>3秒</option>
-                <option value="5000">5秒</option>
+            <label for="memoryTimeSelect">記憶時間</label>
+            <select id="memoryTimeSelect" onchange="onSettingChange()">
+                <option value="200">0.20秒</option>
+                <option value="250">0.25秒</option>
+                <option value="300">0.30秒</option>
+                <option value="400">0.40秒</option>
+                <option value="500">0.50秒</option>
+                <option value="600">0.60秒</option>
+                <option value="650">0.65秒</option>
+                <option value="750">0.75秒</option>
+                <option value="1000">1.00秒</option>
+                <option value="1250">1.25秒</option>
+                <option value="2500" selected>2.50秒</option>
+                <option value="5000">5.00秒</option>
             </select>
         </div>
+    </div>
+
+    <!-- 50回進行状況表示 -->
+    <div class="session-info">
+        <span>現在の設定の進行度:</span>
+        <span class="session-count" id="sessionCount">0 / 50 回</span>
     </div>
 
     <div id="instruction">設定を選んでスタート！</div>
 
     <div id="gameBoard" class="game-board"></div>
 
-    <div class="btn-group">
-        <button id="mainStartBtn" class="start-btn" onclick="initGame()">ゲーム開始</button>
-        <button id="resetBtn" class="reset-btn" onclick="resetGame()">リセット</button>
+    <div class="btn-container">
+        <button id="mainStartBtn" class="btn" onclick="initGame()">ゲーム開始</button>
+
+        <div class="btn-group">
+            <button id="resetBtn" class="btn reset-btn" onclick="resetGame()">盤面リセット</button>
+            <button id="clearDataBtn" class="btn clear-btn" onclick="clearCurrentData()">1回目からやり直す</button>
+            <button id="statsBtn" class="btn stats-btn" onclick="showStatsModal()">グラフ表示</button>
+        </div>
+        <div class="btn-group">
+            <button class="btn import-btn" onclick="document.getElementById('importFile').click()">データ読込(JSON)</button>
+            <input type="file" id="importFile" style="display:none" accept=".json" onchange="importData(event)">
+        </div>
     </div>
 </div>
 
-<div id="overlay">
-    <!-- 大きな正解/不正解アイコン -->
+<!-- リザルトオーバーレイ -->
+<div id="overlay" class="modal-overlay">
     <div id="resultIcon" class="result-icon"></div>
-    <h2 id="resultTitle" style="font-size: 2em; margin: 10px 0;">RESULT</h2>
-    <button class="start-btn" style="margin-top: 20px;" onclick="resetGame()">もう一度遊ぶ</button>
+    <h2 id="resultTitle" style="font-size: 1.8em; margin: 10px 0;">RESULT</h2>
+    <p id="resultDetail" style="color: #bdc3c7; margin-bottom: 20px;"></p>
+    <div class="btn-group">
+        <button class="btn" style="background:#27ae60;" onclick="closeOverlayAndNext()">次のプレイへ</button>
+        <button class="btn stats-btn" onclick="showStatsModal()">グラフを見る</button>
+    </div>
+</div>
+
+<!-- グラフ・詳細分析モーダル -->
+<div id="statsModal" class="modal-overlay">
+    <div class="stats-container">
+        <h2 style="margin-top:0; font-size: 1.2em;" id="statsTitle">成績データ</h2>
+
+        <div class="stats-summary">
+            <div class="stat-box">
+                <span class="stat-val" id="statAccuracy">0%</span>
+                <span class="stat-lbl">正解率</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-val" id="statAvgReached">0.0</span>
+                <span class="stat-lbl">平均到達</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-val" id="statSuccessAvgTime">0.0s</span>
+                <span class="stat-lbl">成功時1タップ</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-val" id="statFailAvgTime">0.0s</span>
+                <span class="stat-lbl">失敗時1닙</span>
+            </div>
+        </div>
+
+        <div class="chart-wrapper">
+            <canvas id="reactionTimeChart"></canvas>
+        </div>
+        <div class="chart-wrapper">
+            <canvas id="reachCountChart"></canvas>
+        </div>
+        <div class="chart-wrapper">
+            <canvas id="spreadChart"></canvas>
+        </div>
+
+        <!-- 外部保存（エクスポート）ボタン -->
+        <div class="btn-group" style="margin-top: 10px;">
+            <button class="btn export-btn" onclick="exportData('csv')">CSV保存</button>
+            <button class="btn export-btn" onclick="exportData('json')">JSON保存</button>
+        </div>
+
+        <div class="btn-group" style="margin-top: 10px;">
+            <button class="btn reset-btn" onclick="closeStatsModal()">閉じる</button>
+            <button class="btn clear-btn" onclick="clearCurrentData()">この設定の記録をリセット</button>
+        </div>
+    </div>
 </div>
 
 <script>
-const BOARD_SIZE = 100;
+const BOARD_COLS = 8;
+const BOARD_SIZE = 40;
+const MAX_SESSIONS = 50;
+const INACTION_TIMEOUT_MS = 5000;
+
 let nextNumber = 1;
 let isClickable = false;
-let currentNumCount = 7;
+let currentNumCount = 9;
 let gameActive = false;
 
-// 盤面の初期化
+let lastTapTime = 0;
+let currentSplitTimes = [];
+let currentPositions = {}; // {num: index}
+let overlayAutoCloseTimer = null;
+let inactionTimer = null;
+
+let reactionTimeChartInstance = null;
+let reachCountChartInstance = null;
+let spreadChartInstance = null;
+
+function getSettingKey() {
+    const num = document.getElementById('numCountSelect').value;
+    const time = document.getElementById('memoryTimeSelect').value;
+    return `flash_mem_stats_${num}_${time}`;
+}
+
+function getStoredData() {
+    const key = getSettingKey();
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : [];
+}
+
+function saveData(history) {
+    const key = getSettingKey();
+    localStorage.setItem(key, JSON.stringify(history));
+    updateSessionUI();
+}
+
+function updateSessionUI() {
+    const history = getStoredData();
+    document.getElementById('sessionCount').textContent = `${history.length} / ${MAX_SESSIONS} 回`;
+}
+
+function onSettingChange() {
+    resetGame();
+    updateSessionUI();
+}
+
 function createEmptyBoard() {
     const board = document.getElementById('gameBoard');
     board.innerHTML = '';
@@ -222,18 +396,77 @@ function createEmptyBoard() {
     }
 }
 createEmptyBoard();
+updateSessionUI();
+
+function stopInactionTimer() {
+    if (inactionTimer) {
+        clearTimeout(inactionTimer);
+        inactionTimer = null;
+    }
+}
+
+function resetInactionTimer() {
+    stopInactionTimer();
+    if (isClickable && gameActive) {
+        inactionTimer = setTimeout(() => {
+            handleInactionTimeout();
+        }, INACTION_TIMEOUT_MS);
+    }
+}
+
+function handleInactionTimeout() {
+    isClickable = false;
+    gameActive = false;
+    stopInactionTimer();
+
+    const instruction = document.getElementById('instruction');
+    instruction.textContent = "⏱️ 5秒以上操作がなかったため無効トライアルとなりました";
+    instruction.style.color = "#e74c3c";
+
+    setTimeout(() => {
+        instruction.style.color = "#bdc3c7";
+        resetGame();
+    }, 2000);
+}
 
 function resetGame() {
     gameActive = false;
     isClickable = false;
+    stopInactionTimer();
+
+    if (overlayAutoCloseTimer) {
+        clearTimeout(overlayAutoCloseTimer);
+        overlayAutoCloseTimer = null;
+    }
     document.getElementById('instruction').textContent = "設定を選んでスタート！";
     document.getElementById('overlay').style.display = 'none';
     document.getElementById('mainStartBtn').disabled = false;
     createEmptyBoard();
 }
 
+function clearCurrentData() {
+    if (confirm("現在の条件（数字の数・記憶時間）の記録をリセットして1回目からやり直しますか？")) {
+        const key = getSettingKey();
+        localStorage.removeItem(key);
+        updateSessionUI();
+        closeStatsModal();
+        resetGame();
+    }
+}
+
 function initGame() {
     if (gameActive) return;
+
+    const history = getStoredData();
+    if (history.length >= MAX_SESSIONS) {
+        if (confirm("すでに50回のセッションが完了しています。データをリセットして新しい50回を始めますか？")) {
+            clearCurrentData();
+        } else {
+            showStatsModal();
+            return;
+        }
+    }
+
     gameActive = true;
 
     const board = document.getElementById('gameBoard');
@@ -247,16 +480,18 @@ function initGame() {
     startBtn.disabled = true;
     nextNumber = 1;
     isClickable = false;
+    currentSplitTimes = [];
+    currentPositions = {};
 
-    // 位置の計算
     let positions = Array.from({length: BOARD_SIZE}, (_, i) => i);
     positions.sort(() => Math.random() - 0.5);
     let map = {};
     for (let i = 1; i <= currentNumCount; i++) {
-        map[positions[i - 1]] = i;
+        const idx = positions[i - 1];
+        map[idx] = i;
+        currentPositions[i] = idx;
     }
 
-    // セルの描画
     for (let i = 0; i < BOARD_SIZE; i++) {
         const div = document.createElement('div');
         div.className = 'cell';
@@ -274,29 +509,39 @@ function initGame() {
 
     instruction.textContent = `数字を覚えてください... (${memoryTime/1000}秒)`;
 
-    // 指定時間後に伏せる
     setTimeout(() => {
-        if (!gameActive) return; // リセットされた場合は中断
+        if (!gameActive) return;
         document.querySelectorAll('.cell.active').forEach(el => {
             el.classList.add('hidden');
         });
         instruction.textContent = "1から順にタップ！";
         isClickable = true;
+        lastTapTime = performance.now();
+        resetInactionTimer();
     }, memoryTime);
 }
 
 function handleCellClick(num, element) {
     if (!isClickable) return;
 
+    resetInactionTimer();
+
+    const now = performance.now();
+    const splitTime = parseFloat(((now - lastTapTime) / 1000).toFixed(3));
+    lastTapTime = now;
+    currentSplitTimes.push(splitTime);
+
     if (num === nextNumber) {
         element.classList.remove('hidden');
         element.classList.add('cleared');
         if (nextNumber === currentNumCount) {
-            finishGame(true);
+            stopInactionTimer();
+            finishGame(true, currentNumCount);
         } else {
             nextNumber++;
         }
     } else {
+        stopInactionTimer();
         element.classList.remove('hidden');
         element.classList.add('wrong');
         const correct = document.getElementById(`num-${nextNumber}`);
@@ -304,16 +549,68 @@ function handleCellClick(num, element) {
             correct.classList.remove('hidden');
             correct.classList.add('correct-hint');
         }
-        finishGame(false);
+        finishGame(false, nextNumber - 1);
     }
 }
 
-function finishGame(success) {
+// 空間配置の広がり（最大ユークリッド距離、平均重心からの距離）を計算するヘルパー
+function calculateSpread(positionsMap) {
+    if (!positionsMap || Object.keys(positionsMap).length === 0) return { maxDist: 0, avgDist: 0 };
+    
+    let coords = [];
+    for (let num in positionsMap) {
+        let idx = positionsMap[num];
+        let x = idx % BOARD_COLS;
+        let y = Math.floor(idx / BOARD_COLS);
+        coords.push({x, y});
+    }
+
+    // 重心計算
+    let sumX = coords.reduce((acc, c) => acc + c.x, 0);
+    let sumY = coords.reduce((acc, c) => acc + c.y, 0);
+    let centerX = sumX / coords.length;
+    let centerY = sumY / coords.length;
+
+    // 重心からの平均距離
+    let totalDistFromCenter = coords.reduce((acc, c) => {
+        return acc + Math.hypot(c.x - centerX, c.y - centerY);
+    }, 0);
+    let avgDist = totalDistFromCenter / coords.length;
+
+    // 全ペア間の最大距離（スパン）
+    let maxDist = 0;
+    for (let i = 0; i < coords.length; i++) {
+        for (let j = i + 1; j < coords.length; j++) {
+            let dist = Math.hypot(coords[i].x - coords[j].x, coords[i].y - coords[j].y);
+            if (dist > maxDist) maxDist = dist;
+        }
+    }
+
+    return { maxDist: parseFloat(maxDist.toFixed(2)), avgDist: parseFloat(avgDist.toFixed(2)) };
+}
+
+function finishGame(success, reached) {
     isClickable = false;
+    stopInactionTimer();
+
+    const spreadInfo = calculateSpread(currentPositions);
+
+    const history = getStoredData();
+    history.push({
+        success: success,
+        reached: reached,
+        total: currentNumCount,
+        splitTimes: currentSplitTimes,
+        positions: currentPositions,
+        spread: spreadInfo,
+        date: new Date().toISOString()
+    });
+    saveData(history);
 
     const overlay = document.getElementById('overlay');
     const title = document.getElementById('resultTitle');
     const icon = document.getElementById('resultIcon');
+    const detail = document.getElementById('resultDetail');
 
     document.querySelectorAll('.cell.active').forEach(el => {
         el.classList.remove('hidden');
@@ -322,28 +619,403 @@ function finishGame(success) {
     setTimeout(() => {
         if (!gameActive) return;
         overlay.style.display = 'flex';
-        
-        // アイコンクラスの再設定
         icon.className = 'result-icon';
-        
+
         if (success) {
             icon.classList.add('success');
-            icon.textContent = "〇"; // 大きな丸を表示
+            icon.textContent = "〇";
             title.textContent = "正解！PERFECT";
             title.style.color = "#2ecc71";
+            detail.textContent = `すべての数字 (${currentNumCount}個) を順番にタップできました！`;
         } else {
             icon.classList.add('failure');
-            icon.textContent = "✕"; // 大きなバツを表示
+            icon.textContent = "✕";
             title.textContent = "残念...不正解";
             title.style.color = "#e74c3c";
+            detail.textContent = `${reached} 番までクリアできました（目標: ${currentNumCount}）`;
         }
+
+        if (history.length >= MAX_SESSIONS) {
+            detail.textContent += " 【50回のテスト完了！グラフを確認できます】";
+        }
+
+        if (overlayAutoCloseTimer) clearTimeout(overlayAutoCloseTimer);
+        overlayAutoCloseTimer = setTimeout(() => {
+            closeOverlayAndNext();
+        }, 3000);
+
     }, 600);
 }
 
-/* ズーム防止 */
-document.addEventListener('touchstart', e => {
-    if (e.touches.length > 1) e.preventDefault();
-}, { passive: false });
+function closeOverlayAndNext() {
+    if (overlayAutoCloseTimer) {
+        clearTimeout(overlayAutoCloseTimer);
+        overlayAutoCloseTimer = null;
+    }
+    document.getElementById('overlay').style.display = 'none';
+    resetGame();
+}
+
+function showStatsModal() {
+    stopInactionTimer();
+    if (overlayAutoCloseTimer) {
+        clearTimeout(overlayAutoCloseTimer);
+        overlayAutoCloseTimer = null;
+    }
+
+    const history = getStoredData();
+    const numSelect = document.getElementById('numCountSelect');
+    const timeSelect = document.getElementById('memoryTimeSelect');
+
+    document.getElementById('statsTitle').textContent = 
+        `成績データ (${numSelect.value}個 / ${(parseInt(timeSelect.value)/1000).toFixed(2)}秒)`;
+
+    if (history.length === 0) {
+        document.getElementById('statAccuracy').textContent = "0%";
+        document.getElementById('statAvgReached').textContent = "0.0";
+        document.getElementById('statSuccessAvgTime').textContent = "0.00s";
+        document.getElementById('statFailAvgTime').textContent = "0.00s";
+    } else {
+        const successes = history.filter(h => h.success);
+        const failures = history.filter(h => !h.success);
+
+        const accuracy = Math.round((successes.length / history.length) * 100);
+        const avgReached = (history.reduce((acc, h) => acc + h.reached, 0) / history.length).toFixed(1);
+
+        const calcAvgSplit = (list) => {
+            let totalTime = 0;
+            let totalTaps = 0;
+            list.forEach(h => {
+                if (h.splitTimes) {
+                    totalTime += h.splitTimes.reduce((a, b) => a + b, 0);
+                    totalTaps += h.splitTimes.length;
+                }
+            });
+            return totalTaps > 0 ? (totalTime / totalTaps).toFixed(2) + "s" : "N/A";
+        };
+
+        document.getElementById('statAccuracy').textContent = `${accuracy}%`;
+        document.getElementById('statAvgReached').textContent = `${avgReached} / ${currentNumCount}`;
+        document.getElementById('statSuccessAvgTime').textContent = calcAvgSplit(successes);
+        document.getElementById('statFailAvgTime').textContent = calcAvgSplit(failures);
+    }
+
+    renderCharts(history);
+    document.getElementById('statsModal').style.display = 'flex';
+}
+
+function closeStatsModal() {
+    document.getElementById('statsModal').style.display = 'none';
+}
+
+// データ読込（インポート）機能
+function importData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const importedArray = JSON.parse(e.target.result);
+            if (!Array.isArray(importedArray)) {
+                alert("無効なデータ形式です（配列形式のJSONファイルを選択してください）。");
+                return;
+            }
+
+            // データの整合性チェック（最初の要素にtotalがあるかなど）
+            if (importedArray.length > 0 && importedArray[0].total) {
+                const targetNum = importedArray[0].total;
+                // 記憶時間は推定が難しいため現在選択されている設定か、あるいは最初に見つかった設定キーに保存する
+                document.getElementById('numCountSelect').value = targetNum;
+            }
+
+            const currentHistory = getStoredData();
+            // 重複排除（日付や内容でマージ、ここでは単純に結合して最大50件に制限または全統合）
+            const merged = [...currentHistory, ...importedArray];
+            
+            // 日付順にソートして重複削除するか、そのまま保存
+            saveData(merged);
+            updateSessionUI();
+            alert(`データを正常に読み込みました！（統合後合計: ${merged.length}件）`);
+            showStatsModal();
+        } catch (err) {
+            alert("JSONファイルの解析に失敗しました。ファイルが破損しているか形式が正しくありません。");
+            console.error(err);
+        }
+        event.target.value = ''; // リセット
+    };
+    reader.readAsText(file);
+}
+
+// ファイル保存（CSV / JSON エクスポート）機能
+function exportData(format) {
+    const history = getStoredData();
+    if (history.length === 0) {
+        alert("保存するデータがありません。");
+        return;
+    }
+
+    const numCount = document.getElementById('numCountSelect').value;
+    const memoryTimeSec = (parseInt(document.getElementById('memoryTimeSelect').value) / 1000).toFixed(2);
+
+    const successes = history.filter(h => h.success);
+    const accuracy = Math.round((successes.length / history.length) * 100);
+    const avgReached = (history.reduce((acc, h) => acc + h.reached, 0) / history.length).toFixed(1);
+
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0];
+
+    const baseFilename = `記憶テスト_${dateStr}_${numCount}個_${memoryTimeSec}秒_平均${avgReached}個_完答率${accuracy}%`;
+
+    if (format === 'json') {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(history, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", baseFilename + ".json");
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+    } else if (format === 'csv') {
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += "SessionIndex,Date,Success,ReachedCount,TotalCount,MaxSpread,AvgSpread,SplitTimes(s)\r\n";
+
+        history.forEach((h, index) => {
+            const date = h.date ? h.date.replace('T', ' ').substring(0, 19) : "";
+            const successStr = h.success ? "1" : "0";
+            const maxS = h.spread ? h.spread.maxDist : "";
+            const avgS = h.spread ? h.spread.avgDist : "";
+            const splitStr = h.splitTimes ? h.splitTimes.join(";") : "";
+            csvContent += `${index + 1},${date},${successStr},${h.reached},${h.total},${maxS},${avgS},"${splitStr}"\r\n`;
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", encodedUri);
+        downloadAnchor.setAttribute("download", baseFilename + ".csv");
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+    }
+}
+
+function renderCharts(history) {
+    const totalNum = parseInt(document.getElementById('numCountSelect').value);
+
+    const labels = [];
+    for (let i = 1; i <= totalNum; i++) {
+        labels.push(i === 1 ? "S→1" : `${i-1}→${i}`);
+    }
+
+    const datasets = [];
+    const succTimesSum = new Array(totalNum).fill(0);
+    const succCounts = new Array(totalNum).fill(0);
+    const failTimesSum = new Array(totalNum).fill(0);
+    const failCounts = new Array(totalNum).fill(0);
+
+    history.forEach((h, index) => {
+        if (!h.splitTimes) return;
+
+        const isSucc = h.success;
+        const color = isSucc ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.18)';
+
+        h.splitTimes.forEach((t, i) => {
+            if (i < totalNum) {
+                if (isSucc) {
+                    succTimesSum[i] += t;
+                    succCounts[i]++;
+                } else {
+                    failTimesSum[i] += t;
+                    failCounts[i]++;
+                }
+            }
+        });
+
+        datasets.push({
+            label: `Try ${index + 1}`,
+            data: h.splitTimes,
+            borderColor: color,
+            borderWidth: 1,
+            pointRadius: 0,
+            tension: 0.1,
+            order: 10
+        });
+    });
+
+    const succAvgData = succTimesSum.map((sum, i) => succCounts[i] > 0 ? (sum / succCounts[i]) : null);
+    const failAvgData = failTimesSum.map((sum, i) => failCounts[i] > 0 ? (sum / failCounts[i]) : null);
+
+    datasets.push({
+        label: '成功平均',
+        data: succAvgData,
+        borderColor: '#2ecc71',
+        borderWidth: 3,
+        pointRadius: 2,
+        pointBackgroundColor: '#2ecc71',
+        tension: 0.1,
+        order: 1
+    });
+
+    datasets.push({
+        label: '失敗平均',
+        data: failAvgData,
+        borderColor: '#e74c3c',
+        borderWidth: 3,
+        pointRadius: 2,
+        pointBackgroundColor: '#e74c3c',
+        tension: 0.1,
+        order: 2
+    });
+
+    if (reactionTimeChartInstance) reactionTimeChartInstance.destroy();
+    if (reachCountChartInstance) reachCountChartInstance.destroy();
+    if (spreadChartInstance) spreadChartInstance.destroy();
+
+    const ctxReact = document.getElementById('reactionTimeChart').getContext('2d');
+    reactionTimeChartInstance = new Chart(ctxReact, {
+        type: 'line',
+        data: { labels: labels, datasets: datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { 
+                    title: { display: true, text: '秒 (s)', color: '#ecf0f1', font: { size: 10 } },
+                    ticks: { color: '#ecf0f1', font: { size: 10 } },
+                    grid: { color: 'rgba(255,255,255,0.1)' },
+                    min: 0
+                },
+                x: { 
+                    title: { display: true, text: 'タップ間隔', color: '#ecf0f1', font: { size: 10 } },
+                    ticks: { color: '#ecf0f1', font: { size: 10 } },
+                    grid: { color: 'rgba(255,255,255,0.1)' } 
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: '#ecf0f1',
+                        font: { size: 11 },
+                        filter: item => item.text === '成功平均' || item.text === '失敗平均'
+                    }
+                },
+                tooltip: {
+                    filter: item => item.dataset.label === '成功平均' || item.dataset.label === '失敗平均'
+                }
+            }
+        }
+    });
+
+    // 到達個数の分布（棒グラフ）
+    const reachDistLabels = [];
+    const reachDistData = new Array(totalNum).fill(0);
+
+    for (let i = 1; i <= totalNum; i++) {
+        reachDistLabels.push(`${i}個`);
+    }
+
+    history.forEach(h => {
+        if (h.reached >= 1 && h.reached <= totalNum) {
+            reachDistData[h.reached - 1]++;
+        }
+    });
+
+    const ctxReach = document.getElementById('reachCountChart').getContext('2d');
+    reachCountChartInstance = new Chart(ctxReach, {
+        type: 'bar',
+        data: {
+            labels: reachDistLabels,
+            datasets: [{
+                label: '到達回数 (回)',
+                data: reachDistData,
+                backgroundColor: '#3498db',
+                borderColor: '#2980b9',
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { 
+                    title: { display: true, text: '回数', color: '#ecf0f1', font: { size: 10 } },
+                    beginAtZero: true,
+                    ticks: { stepSize: 1, color: '#ecf0f1', font: { size: 10 } }, 
+                    grid: { color: 'rgba(255,255,255,0.1)' } 
+                },
+                x: { 
+                    title: { display: true, text: '到達できた数字の数', color: '#ecf0f1', font: { size: 10 } },
+                    ticks: { color: '#ecf0f1', font: { size: 10 } }, 
+                    grid: { display: false } 
+                }
+            },
+            plugins: {
+                legend: { labels: { color: '#ecf0f1', font: { size: 11 } } }
+            }
+        }
+    });
+
+    // 新機能：配置の広がり分析（散布図: X軸=広がり度合(最大距離), Y軸=正解/失敗のステータス）
+    const scatterData = history.map((h, i) => {
+        const spreadVal = h.spread ? h.spread.maxDist : 0;
+        return {
+            x: spreadVal,
+            y: h.success ? 1 : 0,
+            r: 5,
+            trial: i + 1,
+            reached: h.reached
+        };
+    });
+
+    const ctxSpread = document.getElementById('spreadChart').getContext('2d');
+    spreadChartInstance = new Chart(ctxSpread, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: '配置の広がり (散らばり度) vs 結果',
+                data: scatterData,
+                backgroundColor: context => {
+                    const raw = context.raw;
+                    return raw && raw.y === 1 ? 'rgba(46, 204, 113, 0.8)' : 'rgba(231, 76, 60, 0.8)';
+                }
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    title: { display: true, text: '配置の最大スパン (グリッド距離)', color: '#ecf0f1', font: { size: 10 } },
+                    ticks: { color: '#ecf0f1', font: { size: 10 } },
+                    grid: { color: 'rgba(255,255,255,0.1)' }
+                },
+                y: {
+                    title: { display: true, text: '失敗(0) / 成功(1)', color: '#ecf0f1', font: { size: 10 } },
+                    ticks: { 
+                        stepSize: 1,
+                        callback: val => val === 1 ? '成功' : '失敗',
+                        color: '#ecf0f1', 
+                        font: { size: 10 } 
+                    },
+                    min: -0.2,
+                    max: 1.2,
+                    grid: { color: 'rgba(255,255,255,0.1)' }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const raw = context.raw;
+                            return `Try ${raw.trial}: 広がり=${raw.x}, 結果=${raw.y === 1 ? '成功' : '失敗(到達:'+raw.reached+'個)'}`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
 </script>
 
 </body>
