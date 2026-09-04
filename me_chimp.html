@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>瞬間記憶テスト Pro</title>
+<title>瞬間記憶テスト Pro - マスキング課題</title>
 
 <!-- Chart.js 読み込み -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -84,6 +84,8 @@ select {
 }
 
 .cell.active { background: #ecf0f1; }
+/* マスキング課題用のスタイル：1を押した後に隠す白四角 */
+.cell.masked { color: transparent !important; background: #bdc3c7 !important; }
 .cell.hidden { color: transparent !important; background: #95a5a6; }
 .cell.cleared { visibility: hidden; }
 .cell.wrong { background: #e74c3c !important; color: white !important; box-shadow: 0 0 10px red; }
@@ -118,7 +120,6 @@ select {
 .btn:active { transform: translateY(2px); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ゲーム開始ボタン専用スタイル */
 #mainStartBtn {
     width: 100%;
     max-width: 320px;
@@ -133,7 +134,6 @@ select {
 .clear-btn { background: #c0392b; box-shadow: 0 4px #962d22; font-size: 0.8em; padding: 8px 14px; }
 .stats-btn { background: #2980b9; box-shadow: 0 4px #1c5980; }
 .export-btn { background: #8e44ad; box-shadow: 0 4px #512e5f; font-size: 0.85em; padding: 8px 14px; }
-.import-btn { background: #16a085; box-shadow: 0 4px #0e6655; font-size: 0.85em; padding: 8px 14px; }
 
 /* モーダル・オーバーレイ */
 .modal-overlay {
@@ -183,8 +183,6 @@ select {
     width: 95%;
     max-width: 500px;
     box-sizing: border-box;
-    max-height: 90vh;
-    overflow-y: auto;
 }
 
 .stats-summary {
@@ -217,7 +215,7 @@ select {
 <body>
 
 <div class="container">
-    <h1>瞬間記憶テスト</h1>
+    <h1>瞬間記憶テスト (マスキング)</h1>
 
     <div class="settings" id="settingsPanel">
         <div class="setting-item">
@@ -236,7 +234,7 @@ select {
             </select>
         </div>
         <div class="setting-item">
-            <label for="memoryTimeSelect">記憶時間</label>
+            <label for="memoryTimeSelect">確認時間</label>
             <select id="memoryTimeSelect" onchange="onSettingChange()">
                 <option value="200">0.20秒</option>
                 <option value="250">0.25秒</option>
@@ -272,10 +270,6 @@ select {
             <button id="clearDataBtn" class="btn clear-btn" onclick="clearCurrentData()">1回目からやり直す</button>
             <button id="statsBtn" class="btn stats-btn" onclick="showStatsModal()">グラフ表示</button>
         </div>
-        <div class="btn-group">
-            <button class="btn import-btn" onclick="document.getElementById('importFile').click()">データ読込(JSON)</button>
-            <input type="file" id="importFile" style="display:none" accept=".json" onchange="importData(event)">
-        </div>
     </div>
 </div>
 
@@ -310,7 +304,7 @@ select {
             </div>
             <div class="stat-box">
                 <span class="stat-val" id="statFailAvgTime">0.0s</span>
-                <span class="stat-lbl">失敗時1닙</span>
+                <span class="stat-lbl">失敗時1タップ</span>
             </div>
         </div>
 
@@ -320,11 +314,7 @@ select {
         <div class="chart-wrapper">
             <canvas id="reachCountChart"></canvas>
         </div>
-        <div class="chart-wrapper">
-            <canvas id="spreadChart"></canvas>
-        </div>
 
-        <!-- 外部保存（エクスポート）ボタン -->
         <div class="btn-group" style="margin-top: 10px;">
             <button class="btn export-btn" onclick="exportData('csv')">CSV保存</button>
             <button class="btn export-btn" onclick="exportData('json')">JSON保存</button>
@@ -338,7 +328,6 @@ select {
 </div>
 
 <script>
-const BOARD_COLS = 8;
 const BOARD_SIZE = 40;
 const MAX_SESSIONS = 50;
 const INACTION_TIMEOUT_MS = 5000;
@@ -350,18 +339,16 @@ let gameActive = false;
 
 let lastTapTime = 0;
 let currentSplitTimes = [];
-let currentPositions = {}; // {num: index}
 let overlayAutoCloseTimer = null;
 let inactionTimer = null;
 
 let reactionTimeChartInstance = null;
 let reachCountChartInstance = null;
-let spreadChartInstance = null;
 
 function getSettingKey() {
     const num = document.getElementById('numCountSelect').value;
     const time = document.getElementById('memoryTimeSelect').value;
-    return `flash_mem_stats_${num}_${time}`;
+    return `mask_flash_mem_stats_${num}_${time}`;
 }
 
 function getStoredData() {
@@ -445,7 +432,7 @@ function resetGame() {
 }
 
 function clearCurrentData() {
-    if (confirm("現在の条件（数字の数・記憶時間）の記録をリセットして1回目からやり直しますか？")) {
+    if (confirm("現在の条件（数字の数・確認時間）の記録をリセットして1回目からやり直しますか？")) {
         const key = getSettingKey();
         localStorage.removeItem(key);
         updateSessionUI();
@@ -481,15 +468,12 @@ function initGame() {
     nextNumber = 1;
     isClickable = false;
     currentSplitTimes = [];
-    currentPositions = {};
 
     let positions = Array.from({length: BOARD_SIZE}, (_, i) => i);
     positions.sort(() => Math.random() - 0.5);
     let map = {};
     for (let i = 1; i <= currentNumCount; i++) {
-        const idx = positions[i - 1];
-        map[idx] = i;
-        currentPositions[i] = idx;
+        map[positions[i - 1]] = i;
     }
 
     for (let i = 0; i < BOARD_SIZE; i++) {
@@ -499,7 +483,7 @@ function initGame() {
             const val = map[i];
             div.textContent = val;
             div.id = `num-${val}`;
-            div.classList.add('active');
+            div.classList.add('active'); // 最初は全部見えている状態
             div.onclick = () => handleCellClick(val, div);
         } else {
             div.style.background = 'transparent';
@@ -507,14 +491,12 @@ function initGame() {
         board.appendChild(div);
     }
 
-    instruction.textContent = `数字を覚えてください... (${memoryTime/1000}秒)`;
+    instruction.textContent = `配置を覚えてください... (${memoryTime/1000}秒)`;
 
+    // 指定時間経過後、入力を受け付け開始（この時点では数字は見えたまま）
     setTimeout(() => {
         if (!gameActive) return;
-        document.querySelectorAll('.cell.active').forEach(el => {
-            el.classList.add('hidden');
-        });
-        instruction.textContent = "1から順にタップ！";
+        instruction.textContent = "「1」をタップすると他が隠れます！";
         isClickable = true;
         lastTapTime = performance.now();
         resetInactionTimer();
@@ -532,8 +514,21 @@ function handleCellClick(num, element) {
     currentSplitTimes.push(splitTime);
 
     if (num === nextNumber) {
-        element.classList.remove('hidden');
+        // 正解のタップ
+        if (nextNumber === 1) {
+            // 【マスキング発動】1を押した瞬間に、2以降の数字をすべて隠す（白四角にする）
+            for (let i = 2; i <= currentNumCount; i++) {
+                const target = document.getElementById(`num-${i}`);
+                if (target && !target.classList.contains('cleared')) {
+                    target.classList.add('masked');
+                }
+            }
+            instruction.textContent = "記憶を頼りに 2 以降を順にタップ！";
+        }
+
+        element.classList.remove('active', 'masked');
         element.classList.add('cleared');
+
         if (nextNumber === currentNumCount) {
             stopInactionTimer();
             finishGame(true, currentNumCount);
@@ -541,59 +536,32 @@ function handleCellClick(num, element) {
             nextNumber++;
         }
     } else {
+        // 不正解のタップ
         stopInactionTimer();
-        element.classList.remove('hidden');
+        element.classList.remove('masked', 'active');
         element.classList.add('wrong');
-        const correct = document.getElementById(`num-${nextNumber}`);
-        if (correct) {
-            correct.classList.remove('hidden');
-            correct.classList.add('correct-hint');
+
+        // 正解すべきだった場所をヒント表示
+        for (let i = 1; i <= currentNumCount; i++) {
+            const el = document.getElementById(`num-${i}`);
+            if (el) {
+                el.classList.remove('masked', 'active');
+                if (!el.classList.contains('cleared')) {
+                    if (i === nextNumber) {
+                        el.classList.add('correct-hint');
+                    } else {
+                        el.classList.remove('hidden');
+                    }
+                }
+            }
         }
         finishGame(false, nextNumber - 1);
     }
 }
 
-// 空間配置の広がり（最大ユークリッド距離、平均重心からの距離）を計算するヘルパー
-function calculateSpread(positionsMap) {
-    if (!positionsMap || Object.keys(positionsMap).length === 0) return { maxDist: 0, avgDist: 0 };
-    
-    let coords = [];
-    for (let num in positionsMap) {
-        let idx = positionsMap[num];
-        let x = idx % BOARD_COLS;
-        let y = Math.floor(idx / BOARD_COLS);
-        coords.push({x, y});
-    }
-
-    // 重心計算
-    let sumX = coords.reduce((acc, c) => acc + c.x, 0);
-    let sumY = coords.reduce((acc, c) => acc + c.y, 0);
-    let centerX = sumX / coords.length;
-    let centerY = sumY / coords.length;
-
-    // 重心からの平均距離
-    let totalDistFromCenter = coords.reduce((acc, c) => {
-        return acc + Math.hypot(c.x - centerX, c.y - centerY);
-    }, 0);
-    let avgDist = totalDistFromCenter / coords.length;
-
-    // 全ペア間の最大距離（スパン）
-    let maxDist = 0;
-    for (let i = 0; i < coords.length; i++) {
-        for (let j = i + 1; j < coords.length; j++) {
-            let dist = Math.hypot(coords[i].x - coords[j].x, coords[i].y - coords[j].y);
-            if (dist > maxDist) maxDist = dist;
-        }
-    }
-
-    return { maxDist: parseFloat(maxDist.toFixed(2)), avgDist: parseFloat(avgDist.toFixed(2)) };
-}
-
 function finishGame(success, reached) {
     isClickable = false;
     stopInactionTimer();
-
-    const spreadInfo = calculateSpread(currentPositions);
 
     const history = getStoredData();
     history.push({
@@ -601,8 +569,6 @@ function finishGame(success, reached) {
         reached: reached,
         total: currentNumCount,
         splitTimes: currentSplitTimes,
-        positions: currentPositions,
-        spread: spreadInfo,
         date: new Date().toISOString()
     });
     saveData(history);
@@ -612,8 +578,9 @@ function finishGame(success, reached) {
     const icon = document.getElementById('resultIcon');
     const detail = document.getElementById('resultDetail');
 
-    document.querySelectorAll('.cell.active').forEach(el => {
-        el.classList.remove('hidden');
+    // 全ての数字を再び可視化して結果表示
+    document.querySelectorAll('.cell').forEach(el => {
+        el.classList.remove('masked', 'hidden');
     });
 
     setTimeout(() => {
@@ -626,7 +593,7 @@ function finishGame(success, reached) {
             icon.textContent = "〇";
             title.textContent = "正解！PERFECT";
             title.style.color = "#2ecc71";
-            detail.textContent = `すべての数字 (${currentNumCount}個) を順番にタップできました！`;
+            detail.textContent = `マスク後も含め、すべての数字 (${currentNumCount}個) をクリアしました！`;
         } else {
             icon.classList.add('failure');
             icon.textContent = "✕";
@@ -656,6 +623,9 @@ function closeOverlayAndNext() {
     resetGame();
 }
 
+
+
+
 function showStatsModal() {
     stopInactionTimer();
     if (overlayAutoCloseTimer) {
@@ -668,7 +638,7 @@ function showStatsModal() {
     const timeSelect = document.getElementById('memoryTimeSelect');
 
     document.getElementById('statsTitle').textContent = 
-        `成績データ (${numSelect.value}個 / ${(parseInt(timeSelect.value)/1000).toFixed(2)}秒)`;
+        `成績データ (マスク版: ${numSelect.value}個 / ${(parseInt(timeSelect.value)/1000).toFixed(2)}秒)`;
 
     if (history.length === 0) {
         document.getElementById('statAccuracy').textContent = "0%";
@@ -708,46 +678,6 @@ function closeStatsModal() {
     document.getElementById('statsModal').style.display = 'none';
 }
 
-// データ読込（インポート）機能
-function importData(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            const importedArray = JSON.parse(e.target.result);
-            if (!Array.isArray(importedArray)) {
-                alert("無効なデータ形式です（配列形式のJSONファイルを選択してください）。");
-                return;
-            }
-
-            // データの整合性チェック（最初の要素にtotalがあるかなど）
-            if (importedArray.length > 0 && importedArray[0].total) {
-                const targetNum = importedArray[0].total;
-                // 記憶時間は推定が難しいため現在選択されている設定か、あるいは最初に見つかった設定キーに保存する
-                document.getElementById('numCountSelect').value = targetNum;
-            }
-
-            const currentHistory = getStoredData();
-            // 重複排除（日付や内容でマージ、ここでは単純に結合して最大50件に制限または全統合）
-            const merged = [...currentHistory, ...importedArray];
-            
-            // 日付順にソートして重複削除するか、そのまま保存
-            saveData(merged);
-            updateSessionUI();
-            alert(`データを正常に読み込みました！（統合後合計: ${merged.length}件）`);
-            showStatsModal();
-        } catch (err) {
-            alert("JSONファイルの解析に失敗しました。ファイルが破損しているか形式が正しくありません。");
-            console.error(err);
-        }
-        event.target.value = ''; // リセット
-    };
-    reader.readAsText(file);
-}
-
-// ファイル保存（CSV / JSON エクスポート）機能
 function exportData(format) {
     const history = getStoredData();
     if (history.length === 0) {
@@ -765,7 +695,7 @@ function exportData(format) {
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0];
 
-    const baseFilename = `記憶テスト_${dateStr}_${numCount}個_${memoryTimeSec}秒_平均${avgReached}個_完答率${accuracy}%`;
+    const baseFilename = `マスク記憶テスト_${dateStr}_${numCount}個_${memoryTimeSec}秒_平均${avgReached}個_完答率${accuracy}%`;
 
     if (format === 'json') {
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(history, null, 2));
@@ -777,15 +707,13 @@ function exportData(format) {
         downloadAnchor.remove();
     } else if (format === 'csv') {
         let csvContent = "data:text/csv;charset=utf-8,";
-        csvContent += "SessionIndex,Date,Success,ReachedCount,TotalCount,MaxSpread,AvgSpread,SplitTimes(s)\r\n";
+        csvContent += "SessionIndex,Date,Success,ReachedCount,TotalCount,SplitTimes(s)\r\n";
 
         history.forEach((h, index) => {
             const date = h.date ? h.date.replace('T', ' ').substring(0, 19) : "";
             const successStr = h.success ? "1" : "0";
-            const maxS = h.spread ? h.spread.maxDist : "";
-            const avgS = h.spread ? h.spread.avgDist : "";
             const splitStr = h.splitTimes ? h.splitTimes.join(";") : "";
-            csvContent += `${index + 1},${date},${successStr},${h.reached},${h.total},${maxS},${avgS},"${splitStr}"\r\n`;
+            csvContent += `${index + 1},${date},${successStr},${h.reached},${h.total},"${splitStr}"\r\n`;
         });
 
         const encodedUri = encodeURI(csvContent);
@@ -803,7 +731,7 @@ function renderCharts(history) {
 
     const labels = [];
     for (let i = 1; i <= totalNum; i++) {
-        labels.push(i === 1 ? "S→1" : `${i-1}→${i}`);
+        labels.push(i === 1 ? "S→1" : `${i-1}→${i} (隠蔽後)`);
     }
 
     const datasets = [];
@@ -868,7 +796,6 @@ function renderCharts(history) {
 
     if (reactionTimeChartInstance) reactionTimeChartInstance.destroy();
     if (reachCountChartInstance) reachCountChartInstance.destroy();
-    if (spreadChartInstance) spreadChartInstance.destroy();
 
     const ctxReact = document.getElementById('reactionTimeChart').getContext('2d');
     reactionTimeChartInstance = new Chart(ctxReact, {
@@ -885,7 +812,7 @@ function renderCharts(history) {
                     min: 0
                 },
                 x: { 
-                    title: { display: true, text: 'タップ間隔', color: '#ecf0f1', font: { size: 10 } },
+                    title: { display: true, text: 'タップ間隔 (1を押すと全隠蔽)', color: '#ecf0f1', font: { size: 10 } },
                     ticks: { color: '#ecf0f1', font: { size: 10 } },
                     grid: { color: 'rgba(255,255,255,0.1)' } 
                 }
@@ -905,7 +832,6 @@ function renderCharts(history) {
         }
     });
 
-    // 到達個数の分布（棒グラフ）
     const reachDistLabels = [];
     const reachDistData = new Array(totalNum).fill(0);
 
@@ -940,7 +866,11 @@ function renderCharts(history) {
                 y: { 
                     title: { display: true, text: '回数', color: '#ecf0f1', font: { size: 10 } },
                     beginAtZero: true,
-                    ticks: { stepSize: 1, color: '#ecf0f1', font: { size: 10 } }, 
+                    ticks: { 
+                        stepSize: 1,
+                        color: '#ecf0f1', 
+                        font: { size: 10 } 
+                    }, 
                     grid: { color: 'rgba(255,255,255,0.1)' } 
                 },
                 x: { 
@@ -951,67 +881,6 @@ function renderCharts(history) {
             },
             plugins: {
                 legend: { labels: { color: '#ecf0f1', font: { size: 11 } } }
-            }
-        }
-    });
-
-    // 新機能：配置の広がり分析（散布図: X軸=広がり度合(最大距離), Y軸=正解/失敗のステータス）
-    const scatterData = history.map((h, i) => {
-        const spreadVal = h.spread ? h.spread.maxDist : 0;
-        return {
-            x: spreadVal,
-            y: h.success ? 1 : 0,
-            r: 5,
-            trial: i + 1,
-            reached: h.reached
-        };
-    });
-
-    const ctxSpread = document.getElementById('spreadChart').getContext('2d');
-    spreadChartInstance = new Chart(ctxSpread, {
-        type: 'scatter',
-        data: {
-            datasets: [{
-                label: '配置の広がり (散らばり度) vs 結果',
-                data: scatterData,
-                backgroundColor: context => {
-                    const raw = context.raw;
-                    return raw && raw.y === 1 ? 'rgba(46, 204, 113, 0.8)' : 'rgba(231, 76, 60, 0.8)';
-                }
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    title: { display: true, text: '配置の最大スパン (グリッド距離)', color: '#ecf0f1', font: { size: 10 } },
-                    ticks: { color: '#ecf0f1', font: { size: 10 } },
-                    grid: { color: 'rgba(255,255,255,0.1)' }
-                },
-                y: {
-                    title: { display: true, text: '失敗(0) / 成功(1)', color: '#ecf0f1', font: { size: 10 } },
-                    ticks: { 
-                        stepSize: 1,
-                        callback: val => val === 1 ? '成功' : '失敗',
-                        color: '#ecf0f1', 
-                        font: { size: 10 } 
-                    },
-                    min: -0.2,
-                    max: 1.2,
-                    grid: { color: 'rgba(255,255,255,0.1)' }
-                }
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const raw = context.raw;
-                            return `Try ${raw.trial}: 広がり=${raw.x}, 結果=${raw.y === 1 ? '成功' : '失敗(到達:'+raw.reached+'個)'}`;
-                        }
-                    }
-                }
             }
         }
     });
