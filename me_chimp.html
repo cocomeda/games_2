@@ -330,7 +330,7 @@ select {
 <script>
 const BOARD_SIZE = 40;
 const MAX_SESSIONS = 50;
-const INACTION_TIMEOUT_MS = 5000;
+const INACTION_TIMEOUT_MS = 10000;
 
 let nextNumber = 1;
 let isClickable = false;
@@ -407,7 +407,7 @@ function handleInactionTimeout() {
     stopInactionTimer();
 
     const instruction = document.getElementById('instruction');
-    instruction.textContent = "⏱️ 5秒以上操作がなかったため無効トライアルとなりました";
+    instruction.textContent = "⏱️ 10秒以上操作がなかったため無効トライアルとなりました";
     instruction.style.color = "#e74c3c";
 
     setTimeout(() => {
