@@ -1,0 +1,3417 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Memory Focus</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  background: #fff;
+  color: #111;
+}
+
+.container {
+  width: min(900px, 94vw);
+  margin: 0 auto;
+  padding: 20px 0 40px;
+}
+
+/* =========================
+   ヘッダー
+========================= */
+
+header {
+  text-align: center;
+  margin-bottom: 18px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.subtitle {
+  margin-top: 5px;
+  font-size: 13px;
+  color: #555;
+}
+
+/* =========================
+   設定
+========================= */
+
+.settings {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.setting {
+  border: 1px solid #111;
+  padding: 7px 8px;
+  background: #fff;
+}
+
+.setting label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.setting select {
+  width: 100%;
+  height: 32px;
+  border: 1px solid #111;
+  background: #fff;
+  color: #111;
+  font-size: 13px;
+  padding: 0 4px;
+}
+
+/* =========================
+   実験画面
+========================= */
+
+#experimentScreen {
+  display: block;
+}
+
+.info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+#instruction {
+  min-height: 70px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.target-area {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.target-swatch {
+  width: min(280px, 70vw);
+  height: 38px;
+  border: 2px solid #111;
+  flex-shrink: 0;
+}
+
+/* =========================
+   盤面
+========================= */
+
+.board {
+  width: 100%;
+  aspect-ratio: 8 / 5;
+
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+
+  gap: 7px;
+  overflow: hidden;
+
+  border: 1px solid #111;
+  padding: 7px;
+  background: #fff;
+}
+
+.grid-cell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: #f5f5f5;
+}
+
+.tile {
+  width: 100%;
+  height: 100%;
+
+  border: none;
+  padding: 0;
+
+  cursor: pointer;
+  background: transparent;
+
+  transition:
+    transform .08s ease,
+    box-shadow .08s ease;
+}
+
+.tile:hover {
+  transform: scale(.96);
+}
+
+.tile:active {
+  transform: scale(.92);
+}
+
+.tile.masked {
+  background: #c4c9cd !important;
+}
+
+.tile.correct {
+  box-shadow: inset 0 0 0 4px #0066ff;
+}
+
+.tile.wrong {
+  box-shadow: inset 0 0 0 4px #ff0000;
+}
+
+/* =========================
+   ボタン
+========================= */
+
+.buttons {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+button {
+  border: 1px solid #111;
+  background: #111;
+  color: #fff;
+
+  padding: 9px 18px;
+
+  font-size: 13px;
+  cursor: pointer;
+}
+
+button:hover {
+  opacity: .8;
+}
+
+button:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
+.secondary-button {
+  background: #fff;
+  color: #111;
+}
+
+/* =========================
+   結果画面
+========================= */
+
+#resultScreen {
+  display: none;
+}
+
+.result-header {
+  text-align: center;
+  border-bottom: 1px solid #111;
+  padding-bottom: 15px;
+  margin-bottom: 18px;
+}
+
+.result-header h2 {
+  margin: 0 0 5px;
+  font-size: 23px;
+}
+
+.result-header p {
+  margin: 0;
+  font-size: 12px;
+  color: #555;
+}
+
+.result-section {
+  border: 1px solid #111;
+  margin-bottom: 14px;
+  padding: 15px;
+}
+
+.result-section h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.result-item {
+  border: 1px solid #111;
+  padding: 10px;
+  text-align: center;
+}
+
+.result-label {
+  font-size: 11px;
+  color: #555;
+}
+
+.result-value {
+  margin-top: 3px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* =========================
+   分析
+========================= */
+
+.analysis-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.analysis-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.analysis-table th,
+.analysis-table td {
+  border: 1px solid #111;
+  padding: 7px 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.analysis-table th {
+  background: #f5f5f5;
+}
+
+/* =========================
+   色分析
+========================= */
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.color-card {
+  border: 1px solid #111;
+  padding: 9px;
+}
+
+.color-name {
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+
+.color-stat {
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* =========================
+   色の取り違え
+========================= */
+
+.mistake-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mistake-item {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  align-items: center;
+  gap: 7px;
+
+  border: 1px solid #111;
+  padding: 8px;
+  font-size: 12px;
+}
+
+.mistake-from,
+.mistake-to {
+  font-weight: 700;
+}
+
+.arrow {
+  text-align: center;
+}
+
+.mistake-count {
+  font-weight: 700;
+}
+
+/* =========================
+   距離分析
+========================= */
+
+.distance-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.distance-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 50px;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.distance-bar-bg {
+  height: 18px;
+  background: #eee;
+  border: 1px solid #111;
+}
+
+.distance-bar {
+  height: 100%;
+  background: #111;
+}
+
+/* =========================
+   CSV
+========================= */
+
+.csv-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.file-input {
+  display: none;
+}
+
+.file-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid #111;
+  background: #111;
+  color: #fff;
+
+  padding: 9px 18px;
+
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.file-label:hover {
+  opacity: .8;
+}
+
+/* =========================
+   読み込んだデータ
+========================= */
+
+.import-status {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #555;
+}
+
+/* =========================
+   グラフ
+========================= */
+
+.chart-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+canvas {
+  width: 100%;
+  max-width: 100%;
+  height: 280px;
+  display: block;
+  border: 1px solid #111;
+}
+
+/* =========================
+   モバイル
+========================= */
+
+@media (max-width: 650px) {
+
+  .container {
+    width: 96vw;
+    padding-top: 12px;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+
+  .settings {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+  }
+
+  .setting {
+    padding: 6px 4px;
+  }
+
+  .setting label {
+    font-size: 9px;
+  }
+
+  .setting select {
+    font-size: 11px;
+    height: 30px;
+  }
+
+  .board {
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .target-swatch {
+    width: min(260px, 75vw);
+    height: 36px;
+  }
+
+  .result-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .color-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 430px) {
+
+  .settings {
+    gap: 3px;
+  }
+
+  .setting select {
+    padding: 0 1px;
+    font-size: 10px;
+  }
+
+  .setting label {
+    font-size: 8px;
+  }
+
+  .board {
+    gap: 3px;
+    padding: 3px;
+  }
+
+  .target-swatch {
+    width: 75vw;
+    height: 35px;
+  }
+
+  .result-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .distance-row {
+    grid-template-columns: 70px 1fr 40px;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<header>
+  <h1>Memory Focus</h1>
+  <div class="subtitle">
+    色と位置の短期記憶テスト
+  </div>
+</header>
+
+
+<!-- =====================================================
+     実験画面
+===================================================== -->
+
+<section id="experimentScreen">
+
+  <div class="settings">
+
+    <div class="setting">
+      <label for="tileCount">覚える数</label>
+      <select id="tileCount">
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+        <option value="9">9</option>
+        <option value="10" selected>10</option>
+      </select>
+    </div>
+
+    <div class="setting">
+      <label for="memoryTime">記憶時間</label>
+      <select id="memoryTime">
+        <option value="200">0.20秒</option>
+        <option value="250">0.25秒</option>
+        <option value="300">0.30秒</option>
+        <option value="400">0.40秒</option>
+        <option value="500">0.50秒</option>
+        <option value="600">0.60秒</option>
+        <option value="750">0.75秒</option>
+        <option value="1000">1.00秒</option>
+        <option value="1250">1.25秒</option>
+        <option value="1500">1.50秒</option>
+        <option value="1750">1.75秒</option>
+        <option value="2000">2.00秒</option>
+        <option value="2250">2.25秒</option>
+        <option value="2500" selected>2.50秒</option>
+      </select>
+    </div>
+
+    <div class="setting">
+      <label for="hideTime">非表示時間</label>
+      <select id="hideTime">
+        <option value="200">0.20秒</option>
+        <option value="300">0.30秒</option>
+        <option value="400">0.40秒</option>
+        <option value="500">0.50秒</option>
+        <option value="750">0.75秒</option>
+        <option value="1000">1.00秒</option>
+        <option value="1250">1.25秒</option>
+        <option value="1500">1.50秒</option>
+        <option value="1750">1.75秒</option>
+        <option value="2000">2.00秒</option>
+        <option value="2500">2.50秒</option>
+        <option value="3000">3.00秒</option>
+        <option value="4000">4.00秒</option>
+        <option value="5000" selected>5.00秒</option>
+      </select>
+    </div>
+
+    <div class="setting">
+      <label for="trialCount">連続回数</label>
+      <select id="trialCount">
+        <option value="10">10回</option>
+        <option value="20">20回</option>
+        <option value="30">30回</option>
+        <option value="40">40回</option>
+        <option value="50" selected>50回</option>
+      </select>
+    </div>
+
+  </div>
+
+
+  <div class="info">
+    <span id="trialTotal">全50回</span>
+    <span id="score">正解 0</span>
+  </div>
+
+
+  <div id="instruction">
+    スタートを押してください
+  </div>
+
+
+  <div id="board" class="board"></div>
+
+
+  <div class="buttons">
+
+    <button id="startButton">
+      スタート
+    </button>
+
+    <button id="restartButton">
+      最初からやり直す
+    </button>
+
+  </div>
+
+</section>
+
+
+
+<!-- =====================================================
+     結果画面
+===================================================== -->
+
+<section id="resultScreen">
+
+  <div class="result-header">
+
+    <h2>実験結果</h2>
+
+    <p id="resultDate"></p>
+
+  </div>
+
+
+  <!-- 基本結果 -->
+
+  <div class="result-section">
+
+    <h3>基本結果</h3>
+
+    <div class="result-grid">
+
+      <div class="result-item">
+        <div class="result-label">正解数</div>
+        <div class="result-value" id="resultCorrect">-</div>
+      </div>
+
+      <div class="result-item">
+        <div class="result-label">正答率</div>
+        <div class="result-value" id="resultAccuracy">-</div>
+      </div>
+
+      <div class="result-item">
+        <div class="result-label">平均回答時間</div>
+        <div class="result-value" id="resultAverage">-</div>
+      </div>
+
+      <div class="result-item">
+        <div class="result-label">最速回答</div>
+        <div class="result-value" id="resultFastest">-</div>
+      </div>
+
+      <div class="result-item">
+        <div class="result-label">最遅回答</div>
+        <div class="result-value" id="resultSlowest">-</div>
+      </div>
+
+      <div class="result-item">
+        <div class="result-label">総回答時間</div>
+        <div class="result-value" id="resultTotalTime">-</div>
+      </div>
+
+    </div>
+
+  </div>
+
+
+
+  <!-- 誤答距離 -->
+
+  <div class="result-section">
+
+    <h3>誤答位置の分析</h3>
+
+    <div class="result-grid">
+
+      <div class="result-item">
+        <div class="result-label">誤答数</div>
+        <div class="result-value" id="wrongCount">-</div>
+      </div>
+
+      <div class="result-item">
+        <div class="result-label">平均距離</div>
+        <div class="result-value" id="averageDistance">-</div>
+      </div>
+
+      <div class="result-item">
+        <div class="result-label">最長距離</div>
+        <div class="result-value" id="maxDistance">-</div>
+      </div>
+
+    </div>
+
+    <div style="margin-top:15px">
+
+      <div class="distance-bars">
+
+        <div class="distance-row">
+          <span>0マス</span>
+          <div class="distance-bar-bg">
+            <div id="distance0" class="distance-bar"></div>
+          </div>
+          <span id="distance0Text">0%</span>
+        </div>
+
+        <div class="distance-row">
+          <span>1マス</span>
+          <div class="distance-bar-bg">
+            <div id="distance1" class="distance-bar"></div>
+          </div>
+          <span id="distance1Text">0%</span>
+        </div>
+
+        <div class="distance-row">
+          <span>2マス</span>
+          <div class="distance-bar-bg">
+            <div id="distance2" class="distance-bar"></div>
+          </div>
+          <span id="distance2Text">0%</span>
+        </div>
+
+        <div class="distance-row">
+          <span>3マス以上</span>
+          <div class="distance-bar-bg">
+            <div id="distance3" class="distance-bar"></div>
+          </div>
+          <span id="distance3Text">0%</span>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+
+  <!-- 色別分析 -->
+
+  <div class="result-section">
+
+    <h3>色別の成績</h3>
+
+    <div id="colorAnalysis" class="color-grid"></div>
+
+  </div>
+
+
+
+  <!-- 色の取り違え -->
+
+  <div class="result-section">
+
+    <h3>色の取り違え</h3>
+
+    <div id="mistakeAnalysis" class="mistake-list"></div>
+
+  </div>
+
+
+
+  <!-- 詳細データ -->
+
+  <div class="result-section">
+
+    <h3>試行ごとの詳細データ</h3>
+
+    <div class="analysis-table-wrapper">
+
+      <table class="analysis-table">
+
+        <thead>
+          <tr>
+            <th>試行</th>
+            <th>覚える数</th>
+            <th>正解色</th>
+            <th>選択色</th>
+            <th>正解位置</th>
+            <th>選択位置</th>
+            <th>距離</th>
+            <th>結果</th>
+            <th>回答時間</th>
+          </tr>
+        </thead>
+
+        <tbody id="detailTableBody"></tbody>
+
+      </table>
+
+    </div>
+
+  </div>
+
+
+
+  <!-- CSV -->
+
+  <div class="result-section">
+
+    <h3>データ保存・読み込み</h3>
+
+    <div class="csv-buttons">
+
+      <button id="exportButton">
+        この結果をCSV保存
+      </button>
+
+      <label class="file-label">
+
+        複数CSVを読み込む
+
+        <input
+          id="csvInput"
+          class="file-input"
+          type="file"
+          accept=".csv,text/csv"
+          multiple
+        >
+
+      </label>
+
+      <button
+        id="clearImportedButton"
+        class="secondary-button"
+      >
+        読み込んだデータを削除
+      </button>
+
+    </div>
+
+    <div id="importStatus" class="import-status">
+      読み込んだ外部データ：0試行
+    </div>
+
+  </div>
+
+
+
+  <!-- 複数データ分析 -->
+
+  <div class="result-section">
+
+    <h3>複数データの分析</h3>
+
+    <div class="result-grid">
+
+      <div class="result-item">
+        <div class="result-label">読み込んだ試行数</div>
+        <div class="result-value" id="combinedTrials">0</div>
+      </div>
+
+      <div class="result-item">
+        <div class="result-label">平均正答率</div>
+        <div class="result-value" id="combinedAccuracy">-</div>
+      </div>
+
+      <div class="result-item">
+        <div class="result-label">平均回答時間</div>
+        <div class="result-value" id="combinedAverage">-</div>
+      </div>
+
+    </div>
+
+  </div>
+
+
+
+  <!-- 回答時間グラフ -->
+
+  <div class="result-section">
+
+    <h3>試行ごとの回答時間</h3>
+
+    <div class="chart-container">
+      <canvas id="timeChart"></canvas>
+    </div>
+
+  </div>
+
+
+
+  <!-- 正答率グラフ -->
+
+  <div class="result-section">
+
+    <h3>タイル数別の正答率</h3>
+
+    <div class="chart-container">
+      <canvas id="tileAccuracyChart"></canvas>
+    </div>
+
+  </div>
+
+
+
+  <!-- 戻る -->
+
+  <div class="buttons">
+
+    <button id="backButton">
+      ← 実験に戻る
+    </button>
+
+    <button id="againButton">
+      もう一度
+    </button>
+
+  </div>
+
+</section>
+
+</div>
+
+
+
+<script>
+
+/* =====================================================
+   色
+===================================================== */
+
+const COLORS = [
+  "#D32F2F", // 赤
+  "#F57C00", // オレンジ
+  "#388E3C", // 緑
+  "#1976D2", // 青
+  "#7B1FA2", // 紫
+  "#FBC02D", // 黄色
+  "#00ACC1", // 水色
+  "#E91E63", // ピンク
+  "#9E9E9E", // 灰色
+  "#795548"  // 茶色
+];
+
+const COLOR_NAMES = [
+  "赤",
+  "オレンジ",
+  "緑",
+  "青",
+  "紫",
+  "黄色",
+  "水色",
+  "ピンク",
+  "灰色",
+  "茶色"
+];
+
+
+/* =====================================================
+   DOM
+===================================================== */
+
+const experimentScreen =
+  document.getElementById("experimentScreen");
+
+const resultScreen =
+  document.getElementById("resultScreen");
+
+const board =
+  document.getElementById("board");
+
+const instruction =
+  document.getElementById("instruction");
+
+const score =
+  document.getElementById("score");
+
+const trialTotal =
+  document.getElementById("trialTotal");
+
+const startButton =
+  document.getElementById("startButton");
+
+const restartButton =
+  document.getElementById("restartButton");
+
+const againButton =
+  document.getElementById("againButton");
+
+const backButton =
+  document.getElementById("backButton");
+
+const tileCountSelect =
+  document.getElementById("tileCount");
+
+const memoryTimeSelect =
+  document.getElementById("memoryTime");
+
+const hideTimeSelect =
+  document.getElementById("hideTime");
+
+const trialCountSelect =
+  document.getElementById("trialCount");
+
+const csvInput =
+  document.getElementById("csvInput");
+
+const exportButton =
+  document.getElementById("exportButton");
+
+const clearImportedButton =
+  document.getElementById("clearImportedButton");
+
+
+/* =====================================================
+   状態
+===================================================== */
+
+let currentTrial = 0;
+
+let totalTrials = 50;
+
+let correctCount = 0;
+
+let answerTimes = [];
+
+let currentTiles = [];
+
+let currentColors = [];
+
+let currentPositions = [];
+
+let correctTileIndex = -1;
+
+let answering = false;
+
+let answerStartTime = 0;
+
+let timer1 = null;
+let timer2 = null;
+let timer3 = null;
+
+
+/*
+  各試行の詳細データ
+*/
+let trialData = [];
+
+
+/*
+  外部から読み込んだデータ
+*/
+let importedData = [];
+
+
+/*
+  現在の実験ID
+*/
+let experimentId = "";
+
+
+/* =====================================================
+   シャッフル
+===================================================== */
+
+function shuffle(array) {
+
+  const result = [...array];
+
+  for (let i = result.length - 1; i > 0; i--) {
+
+    const j =
+      Math.floor(Math.random() * (i + 1));
+
+    [result[i], result[j]] =
+      [result[j], result[i]];
+  }
+
+  return result;
+}
+
+
+/* =====================================================
+   グリッド作成
+===================================================== */
+
+function createGrid() {
+
+  board.innerHTML = "";
+
+  for (let i = 0; i < 40; i++) {
+
+    const cell =
+      document.createElement("div");
+
+    cell.className = "grid-cell";
+
+    cell.dataset.index = i;
+
+    board.appendChild(cell);
+  }
+}
+
+
+/* =====================================================
+   タイル作成
+===================================================== */
+
+function createTiles(count) {
+
+  currentTiles = [];
+  currentColors = [];
+  currentPositions = [];
+
+  const cells =
+    Array.from(
+      board.querySelectorAll(".grid-cell")
+    );
+
+  /*
+    40マスから重複なしで選択
+  */
+
+  const positions =
+    shuffle(
+      Array.from({ length: 40 }, (_, i) => i)
+    ).slice(0, count);
+
+
+  /*
+    色も重複なし
+  */
+
+  const colors =
+    shuffle(COLORS).slice(0, count);
+
+
+  for (let i = 0; i < count; i++) {
+
+    const position =
+      positions[i];
+
+    const color =
+      colors[i];
+
+    const tile =
+      document.createElement("button");
+
+    tile.className = "tile";
+
+    tile.dataset.tileIndex = i;
+
+    tile.dataset.position = position;
+
+    tile.style.backgroundColor = color;
+
+    tile.style.pointerEvents = "none";
+
+    cells[position].appendChild(tile);
+
+    currentTiles.push(tile);
+
+    currentColors.push(color);
+
+    currentPositions.push(position);
+  }
+}
+
+
+/* =====================================================
+   色名
+===================================================== */
+
+function getColorName(hex) {
+
+  const index =
+    COLORS.indexOf(hex);
+
+  if (index === -1) {
+    return hex;
+  }
+
+  return COLOR_NAMES[index];
+}
+
+
+/* =====================================================
+   位置
+===================================================== */
+
+function getRow(position) {
+
+  return Math.floor(position / 8);
+}
+
+function getCol(position) {
+
+  return position % 8;
+}
+
+
+/* =====================================================
+   距離
+===================================================== */
+
+/*
+  チェビシェフ距離。
+
+  例：
+
+  正解：3行4列
+  選択：4行5列
+
+  → 1マス
+*/
+
+function calculateDistance(a, b) {
+
+  const rowA = getRow(a);
+  const colA = getCol(a);
+
+  const rowB = getRow(b);
+  const colB = getCol(b);
+
+  return Math.max(
+    Math.abs(rowA - rowB),
+    Math.abs(colA - colB)
+  );
+}
+
+
+/* =====================================================
+   色を表示
+===================================================== */
+
+function showColors() {
+
+  currentTiles.forEach(tile => {
+
+    tile.classList.remove("masked");
+
+  });
+}
+
+
+/* =====================================================
+   色を隠す
+===================================================== */
+
+function hideColors() {
+
+  currentTiles.forEach(tile => {
+
+    tile.classList.add("masked");
+
+  });
+
+  instruction.textContent = "……";
+
+  const hideTime =
+    Number(hideTimeSelect.value);
+
+  timer2 =
+    setTimeout(
+      showTarget,
+      hideTime
+    );
+}
+
+
+/* =====================================================
+   ターゲット表示
+===================================================== */
+
+function showTarget() {
+
+  correctTileIndex =
+    Math.floor(
+      Math.random() *
+      currentTiles.length
+    );
+
+  const targetColor =
+    currentColors[correctTileIndex];
+
+
+  instruction.innerHTML = "";
+
+
+  const targetArea =
+    document.createElement("div");
+
+  targetArea.className =
+    "target-area";
+
+
+  const text =
+    document.createElement("div");
+
+  text.textContent =
+    "この色を押してください";
+
+
+  const swatch =
+    document.createElement("div");
+
+  swatch.className =
+    "target-swatch";
+
+  swatch.style.backgroundColor =
+    targetColor;
+
+
+  targetArea.appendChild(text);
+
+  targetArea.appendChild(swatch);
+
+  instruction.appendChild(targetArea);
+
+
+  /*
+    ここで初めて回答可能
+  */
+
+  currentTiles.forEach(tile => {
+
+    tile.style.pointerEvents = "auto";
+
+  });
+
+  answering = true;
+
+  answerStartTime =
+    performance.now();
+}
+
+
+/* =====================================================
+   タイルクリック
+===================================================== */
+
+function handleTileClick(tile) {
+
+  if (!answering) {
+    return;
+  }
+
+
+  const selectedIndex =
+    Number(tile.dataset.tileIndex);
+
+
+  const responseTime =
+    performance.now() -
+    answerStartTime;
+
+
+  const correct =
+    selectedIndex === correctTileIndex;
+
+
+  answering = false;
+
+
+  /*
+    二重クリック防止
+  */
+
+  currentTiles.forEach(t => {
+
+    t.style.pointerEvents = "none";
+
+  });
+
+
+  /*
+    全タイルの色を復元
+  */
+
+  currentTiles.forEach(t => {
+
+    t.classList.remove("masked");
+
+  });
+
+
+  const correctPosition =
+    currentPositions[correctTileIndex];
+
+  const selectedPosition =
+    currentPositions[selectedIndex];
+
+
+  const correctColor =
+    currentColors[correctTileIndex];
+
+  const selectedColor =
+    currentColors[selectedIndex];
+
+
+  const distance =
+    calculateDistance(
+      correctPosition,
+      selectedPosition
+    );
+
+
+  /*
+    正解表示
+  */
+
+  currentTiles[correctTileIndex]
+    .classList.add("correct");
+
+
+  /*
+    誤答表示
+  */
+
+  if (!correct) {
+
+    tile.classList.add("wrong");
+
+  } else {
+
+    correctCount++;
+
+  }
+
+
+  /*
+    回答時間保存
+  */
+
+  answerTimes.push(responseTime);
+
+
+  /*
+    試行データ保存
+  */
+
+  trialData.push({
+
+    experimentId,
+
+    date:
+      new Date().toISOString(),
+
+    trial:
+      currentTrial,
+
+    tileCount:
+      currentTiles.length,
+
+    memoryTime:
+      Number(memoryTimeSelect.value),
+
+    hideTime:
+      Number(hideTimeSelect.value),
+
+    correctColor:
+      getColorName(correctColor),
+
+    selectedColor:
+      getColorName(selectedColor),
+
+    correctPosition,
+
+    selectedPosition,
+
+    correctRow:
+      getRow(correctPosition) + 1,
+
+    correctCol:
+      getCol(correctPosition) + 1,
+
+    selectedRow:
+      getRow(selectedPosition) + 1,
+
+    selectedCol:
+      getCol(selectedPosition) + 1,
+
+    distance,
+
+    correct,
+
+    responseTime:
+      Number(responseTime.toFixed(2))
+
+  });
+
+
+  score.textContent =
+    "正解 " + correctCount;
+
+
+  /*
+    少し表示してから次へ
+  */
+
+  timer3 =
+    setTimeout(
+      nextTrial,
+      900
+    );
+}
+
+
+/* =====================================================
+   次の試行
+===================================================== */
+
+function nextTrial() {
+
+  if (currentTrial >= totalTrials) {
+
+    finishExperiment();
+
+    return;
+  }
+
+  startTrial();
+}
+
+
+/* =====================================================
+   試行開始
+===================================================== */
+
+function startTrial() {
+
+  if (currentTrial >= totalTrials) {
+
+    finishExperiment();
+
+    return;
+  }
+
+
+  currentTrial++;
+
+
+  trialTotal.textContent =
+    "全" + totalTrials + "回　" +
+    currentTrial + "/" +
+    totalTrials;
+
+
+  instruction.textContent =
+    "覚えてください";
+
+
+  const count =
+    Number(tileCountSelect.value);
+
+
+  createGrid();
+
+  createTiles(count);
+
+  showColors();
+
+
+  currentTiles.forEach(tile => {
+
+    tile.style.pointerEvents = "none";
+
+  });
+
+
+  const memoryTime =
+    Number(memoryTimeSelect.value);
+
+
+  timer1 =
+    setTimeout(
+      hideColors,
+      memoryTime
+    );
+}
+
+
+/* =====================================================
+   タイマー削除
+===================================================== */
+
+function clearTimers() {
+
+  clearTimeout(timer1);
+  clearTimeout(timer2);
+  clearTimeout(timer3);
+
+  timer1 = null;
+  timer2 = null;
+  timer3 = null;
+}
+
+
+/* =====================================================
+   実験ID作成
+===================================================== */
+
+function createExperimentId() {
+
+  const now =
+    new Date();
+
+  return (
+    now.getFullYear() +
+    pad(now.getMonth() + 1) +
+    pad(now.getDate()) +
+    "_" +
+    pad(now.getHours()) +
+    pad(now.getMinutes()) +
+    pad(now.getSeconds())
+  );
+}
+
+
+function pad(n) {
+
+  return String(n).padStart(2, "0");
+
+}
+
+
+/* =====================================================
+   実験開始
+===================================================== */
+
+function startExperiment() {
+
+  clearTimers();
+
+
+  currentTrial = 0;
+
+  correctCount = 0;
+
+  answerTimes = [];
+
+  trialData = [];
+
+  experimentId =
+    createExperimentId();
+
+
+  totalTrials =
+    Number(trialCountSelect.value);
+
+
+  trialTotal.textContent =
+    "全" + totalTrials + "回";
+
+
+  score.textContent =
+    "正解 0";
+
+
+  resultScreen.style.display =
+    "none";
+
+  experimentScreen.style.display =
+    "block";
+
+
+  startButton.disabled =
+    true;
+
+
+  instruction.textContent =
+    "準備してください";
+
+
+  createGrid();
+
+
+  setTimeout(
+    startTrial,
+    700
+  );
+}
+
+
+/* =====================================================
+   最初からやり直す
+===================================================== */
+
+function restartExperiment() {
+
+  clearTimers();
+
+
+  currentTrial = 0;
+
+  correctCount = 0;
+
+  answerTimes = [];
+
+  trialData = [];
+
+  experimentId =
+    createExperimentId();
+
+
+  totalTrials =
+    Number(trialCountSelect.value);
+
+
+  trialTotal.textContent =
+    "全" + totalTrials + "回";
+
+
+  score.textContent =
+    "正解 0";
+
+
+  resultScreen.style.display =
+    "none";
+
+  experimentScreen.style.display =
+    "block";
+
+
+  startButton.disabled =
+    true;
+
+
+  instruction.textContent =
+    "準備してください";
+
+
+  createGrid();
+
+
+  setTimeout(
+    startTrial,
+    500
+  );
+}
+
+
+/* =====================================================
+   実験終了
+===================================================== */
+
+function finishExperiment() {
+
+  clearTimers();
+
+  answering = false;
+
+
+  currentTiles.forEach(tile => {
+
+    tile.style.pointerEvents =
+      "none";
+
+    tile.classList.remove(
+      "masked"
+    );
+
+  });
+
+
+  instruction.textContent =
+    "終了";
+
+
+  startButton.disabled =
+    false;
+
+
+  showResults();
+}
+
+
+/* =====================================================
+   結果表示
+===================================================== */
+
+function showResults() {
+
+  experimentScreen.style.display =
+    "none";
+
+  resultScreen.style.display =
+    "block";
+
+
+  /*
+    基本統計
+  */
+
+  const total =
+    trialData.length;
+
+  const correct =
+    trialData.filter(
+      d => d.correct
+    ).length;
+
+  const wrong =
+    total - correct;
+
+
+  const times =
+    trialData.map(
+      d => d.responseTime
+    );
+
+
+  const average =
+    times.length
+      ? times.reduce(
+          (a, b) => a + b,
+          0
+        ) / times.length
+      : 0;
+
+
+  const fastest =
+    times.length
+      ? Math.min(...times)
+      : 0;
+
+
+  const slowest =
+    times.length
+      ? Math.max(...times)
+      : 0;
+
+
+  const totalTime =
+    times.reduce(
+      (a, b) => a + b,
+      0
+    );
+
+
+  const accuracy =
+    total
+      ? correct / total * 100
+      : 0;
+
+
+  document.getElementById(
+    "resultCorrect"
+  ).textContent =
+    correct + " / " + total;
+
+
+  document.getElementById(
+    "resultAccuracy"
+  ).textContent =
+    accuracy.toFixed(1) + "%";
+
+
+  document.getElementById(
+    "resultAverage"
+  ).textContent =
+    formatTime(average);
+
+
+  document.getElementById(
+    "resultFastest"
+  ).textContent =
+    formatTime(fastest);
+
+
+  document.getElementById(
+    "resultSlowest"
+  ).textContent =
+    formatTime(slowest);
+
+
+  document.getElementById(
+    "resultTotalTime"
+  ).textContent =
+    formatTime(totalTime);
+
+
+  document.getElementById(
+    "resultDate"
+  ).textContent =
+    "実験ID：" + experimentId;
+
+
+  analyzeDistance();
+
+  analyzeColors();
+
+  analyzeMistakes();
+
+  renderDetailTable();
+
+  analyzeCombinedData();
+
+  drawTimeChart();
+
+  drawTileAccuracyChart();
+
+
+  resultScreen.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+}
+
+
+/* =====================================================
+   時間表示
+===================================================== */
+
+function formatTime(ms) {
+
+  return (
+    (ms / 1000).toFixed(2) +
+    "秒"
+  );
+}
+
+
+/* =====================================================
+   距離分析
+===================================================== */
+
+function analyzeDistance() {
+
+  const wrongData =
+    trialData.filter(
+      d => !d.correct
+    );
+
+
+  const distances =
+    wrongData.map(
+      d => d.distance
+    );
+
+
+  const count =
+    distances.length;
+
+
+  const average =
+    count
+      ? distances.reduce(
+          (a, b) => a + b,
+          0
+        ) / count
+      : 0;
+
+
+  const max =
+    count
+      ? Math.max(...distances)
+      : 0;
+
+
+  document.getElementById(
+    "wrongCount"
+  ).textContent =
+    count;
+
+
+  document.getElementById(
+    "averageDistance"
+  ).textContent =
+    count
+      ? average.toFixed(2) + "マス"
+      : "-";
+
+
+  document.getElementById(
+    "maxDistance"
+  ).textContent =
+    count
+      ? max + "マス"
+      : "-";
+
+
+  /*
+    距離ごとの割合
+  */
+
+  const categories = [
+    0,
+    1,
+    2
+  ];
+
+
+  const distanceCounts = {
+    0: 0,
+    1: 0,
+    2: 0,
+    3: 0
+  };
+
+
+  distances.forEach(d => {
+
+    if (d >= 3) {
+
+      distanceCounts[3]++;
+
+    } else {
+
+      distanceCounts[d]++;
+
+    }
+
+  });
+
+
+  for (let i = 0; i <= 3; i++) {
+
+    const percentage =
+      count
+        ? distanceCounts[i] /
+          count *
+          100
+        : 0;
+
+
+    document.getElementById(
+      "distance" + i
+    ).style.width =
+      percentage + "%";
+
+
+    document.getElementById(
+      "distance" + i + "Text"
+    ).textContent =
+      percentage.toFixed(1) + "%";
+  }
+}
+
+
+/* =====================================================
+   色別分析
+===================================================== */
+
+function analyzeColors() {
+
+  const container =
+    document.getElementById(
+      "colorAnalysis"
+    );
+
+
+  container.innerHTML = "";
+
+
+  COLOR_NAMES.forEach(name => {
+
+    const data =
+      trialData.filter(
+        d => d.correctColor === name
+      );
+
+
+    const correct =
+      data.filter(
+        d => d.correct
+      ).length;
+
+
+    const accuracy =
+      data.length
+        ? correct / data.length * 100
+        : 0;
+
+
+    const avgTime =
+      data.length
+        ? data.reduce(
+            (sum, d) =>
+              sum + d.responseTime,
+            0
+          ) / data.length
+        : 0;
+
+
+    const card =
+      document.createElement("div");
+
+    card.className =
+      "color-card";
+
+
+    card.innerHTML = `
+
+      <div class="color-name">
+        ${name}
+      </div>
+
+      <div class="color-stat">
+        試行数：${data.length}<br>
+        正解：${correct}<br>
+        正答率：${accuracy.toFixed(1)}%<br>
+        平均回答時間：
+        ${data.length ? formatTime(avgTime) : "-"}
+      </div>
+
+    `;
+
+
+    container.appendChild(card);
+
+  });
+}
+
+
+/* =====================================================
+   色の取り違え分析
+===================================================== */
+
+function analyzeMistakes() {
+
+  const container =
+    document.getElementById(
+      "mistakeAnalysis"
+    );
+
+
+  container.innerHTML = "";
+
+
+  const mistakes = {};
+
+
+  trialData
+    .filter(d => !d.correct)
+    .forEach(d => {
+
+      const key =
+        d.correctColor +
+        "→" +
+        d.selectedColor;
+
+
+      if (!mistakes[key]) {
+
+        mistakes[key] = {
+          from: d.correctColor,
+          to: d.selectedColor,
+          count: 0
+        };
+
+      }
+
+
+      mistakes[key].count++;
+
+    });
+
+
+  const sorted =
+    Object.values(mistakes)
+      .sort(
+        (a, b) =>
+          b.count - a.count
+      );
+
+
+  if (!sorted.length) {
+
+    container.innerHTML =
+      "<div>誤答はありません。</div>";
+
+    return;
+  }
+
+
+  sorted.forEach(item => {
+
+    const row =
+      document.createElement("div");
+
+    row.className =
+      "mistake-item";
+
+
+    row.innerHTML = `
+
+      <span class="mistake-from">
+        ${item.from}
+      </span>
+
+      <span class="arrow">
+        →
+      </span>
+
+      <span class="mistake-to">
+        ${item.to}
+      </span>
+
+      <span class="mistake-count">
+        ${item.count}回
+      </span>
+
+    `;
+
+
+    container.appendChild(row);
+
+  });
+}
+
+
+/* =====================================================
+   詳細テーブル
+===================================================== */
+
+function renderDetailTable() {
+
+  const tbody =
+    document.getElementById(
+      "detailTableBody"
+    );
+
+
+  tbody.innerHTML = "";
+
+
+  trialData.forEach(d => {
+
+    const tr =
+      document.createElement("tr");
+
+
+    const result =
+      d.correct
+        ? "○"
+        : "×";
+
+
+    const correctPosition =
+      `${d.correctRow}行 ${d.correctCol}列`;
+
+
+    const selectedPosition =
+      `${d.selectedRow}行 ${d.selectedCol}列`;
+
+
+    tr.innerHTML = `
+
+      <td>${d.trial}</td>
+
+      <td>${d.tileCount}</td>
+
+      <td>${d.correctColor}</td>
+
+      <td>${d.selectedColor}</td>
+
+      <td>${correctPosition}</td>
+
+      <td>${selectedPosition}</td>
+
+      <td>${d.distance}</td>
+
+      <td>${result}</td>
+
+      <td>${formatTime(d.responseTime)}</td>
+
+    `;
+
+
+    tbody.appendChild(tr);
+
+  });
+}
+
+
+/* =====================================================
+   CSVエスケープ
+===================================================== */
+
+function csvEscape(value) {
+
+  const text =
+    String(value ?? "");
+
+
+  if (
+    text.includes(",") ||
+    text.includes('"') ||
+    text.includes("\n")
+  ) {
+
+    return '"' +
+      text.replace(
+        /"/g,
+        '""'
+      ) +
+      '"';
+
+  }
+
+
+  return text;
+}
+
+
+/* =====================================================
+   CSV保存
+===================================================== */
+
+function exportCSV() {
+
+  if (!trialData.length) {
+
+    alert(
+      "保存できる実験データがありません。"
+    );
+
+    return;
+  }
+
+
+  const headers = [
+    "experimentId",
+    "date",
+    "trial",
+    "tileCount",
+    "memoryTime",
+    "hideTime",
+    "correctColor",
+    "selectedColor",
+    "correctPosition",
+    "selectedPosition",
+    "correctRow",
+    "correctCol",
+    "selectedRow",
+    "selectedCol",
+    "distance",
+    "correct",
+    "responseTime"
+  ];
+
+
+  const rows =
+    trialData.map(d =>
+      headers.map(
+        h => csvEscape(d[h])
+      ).join(",")
+    );
+
+
+  const csv =
+    "\uFEFF" +
+    headers.join(",") +
+    "\n" +
+    rows.join("\n");
+
+
+  const blob =
+    new Blob(
+      [csv],
+      {
+        type:
+          "text/csv;charset=utf-8;"
+      }
+    );
+
+
+  const url =
+    URL.createObjectURL(blob);
+
+
+  const a =
+    document.createElement("a");
+
+
+  a.href = url;
+
+  a.download =
+    "MemoryFocus_" +
+    experimentId +
+    ".csv";
+
+
+  document.body.appendChild(a);
+
+  a.click();
+
+  a.remove();
+
+
+  URL.revokeObjectURL(url);
+}
+
+
+/* =====================================================
+   CSV解析
+===================================================== */
+
+function parseCSV(text) {
+
+  /*
+    簡易だが引用符にも対応したCSVパーサー
+  */
+
+  const rows = [];
+
+  let row = [];
+
+  let cell = "";
+
+  let inQuotes = false;
+
+
+  for (
+    let i = 0;
+    i < text.length;
+    i++
+  ) {
+
+    const char =
+      text[i];
+
+
+    if (char === '"') {
+
+      if (
+        inQuotes &&
+        text[i + 1] === '"'
+      ) {
+
+        cell += '"';
+
+        i++;
+
+      } else {
+
+        inQuotes =
+          !inQuotes;
+
+      }
+
+    } else if (
+      char === "," &&
+      !inQuotes
+    ) {
+
+      row.push(cell);
+
+      cell = "";
+
+    } else if (
+      (char === "\n" ||
+       char === "\r") &&
+      !inQuotes
+    ) {
+
+      if (
+        char === "\r" &&
+        text[i + 1] === "\n"
+      ) {
+        i++;
+      }
+
+      row.push(cell);
+
+      cell = "";
+
+      if (row.some(v => v !== "")) {
+
+        rows.push(row);
+
+      }
+
+      row = [];
+
+    } else {
+
+      cell += char;
+
+    }
+  }
+
+
+  if (cell !== "" || row.length) {
+
+    row.push(cell);
+
+    rows.push(row);
+
+  }
+
+
+  if (rows.length < 2) {
+
+    return [];
+
+  }
+
+
+  const headers =
+    rows[0];
+
+
+  return rows
+    .slice(1)
+    .map(values => {
+
+      const obj = {};
+
+      headers.forEach(
+        (header, index) => {
+
+          obj[header] =
+            values[index] ?? "";
+
+        }
+      );
+
+
+      /*
+        型変換
+      */
+
+      obj.trial =
+        Number(obj.trial);
+
+      obj.tileCount =
+        Number(obj.tileCount);
+
+      obj.memoryTime =
+        Number(obj.memoryTime);
+
+      obj.hideTime =
+        Number(obj.hideTime);
+
+      obj.correctPosition =
+        Number(obj.correctPosition);
+
+      obj.selectedPosition =
+        Number(obj.selectedPosition);
+
+      obj.correctRow =
+        Number(obj.correctRow);
+
+      obj.correctCol =
+        Number(obj.correctCol);
+
+      obj.selectedRow =
+        Number(obj.selectedRow);
+
+      obj.selectedCol =
+        Number(obj.selectedCol);
+
+      obj.distance =
+        Number(obj.distance);
+
+      obj.correct =
+        obj.correct === "true";
+
+      obj.responseTime =
+        Number(obj.responseTime);
+
+
+      return obj;
+
+    });
+
+}
+
+
+/* =====================================================
+   複数CSV読み込み
+===================================================== */
+
+csvInput.addEventListener(
+  "change",
+  async function() {
+
+    const files =
+      Array.from(this.files);
+
+
+    if (!files.length) {
+      return;
+    }
+
+
+    let added = 0;
+
+
+    for (const file of files) {
+
+      try {
+
+        const text =
+          await file.text();
+
+
+        const data =
+          parseCSV(text);
+
+
+        if (!data.length) {
+          continue;
+        }
+
+
+        importedData =
+          importedData.concat(data);
+
+
+        added += data.length;
+
+      } catch (error) {
+
+        console.error(
+          error
+        );
+
+      }
+
+    }
+
+
+    document.getElementById(
+      "importStatus"
+    ).textContent =
+      "読み込んだ外部データ：" +
+      importedData.length +
+      "試行（今回追加：" +
+      added +
+      "試行）";
+
+
+    analyzeCombinedData();
+
+    csvInput.value = "";
+
+  }
+);
+
+
+/* =====================================================
+   外部データ削除
+===================================================== */
+
+clearImportedButton.addEventListener(
+  "click",
+  function() {
+
+    importedData = [];
+
+
+    document.getElementById(
+      "importStatus"
+    ).textContent =
+      "読み込んだ外部データ：0試行";
+
+
+    analyzeCombinedData();
+
+  }
+);
+
+
+/* =====================================================
+   複数データ分析
+===================================================== */
+
+function analyzeCombinedData() {
+
+  /*
+    現在の実験＋外部データ
+  */
+
+  const combined =
+    importedData.concat(
+      trialData
+    );
+
+
+  document.getElementById(
+    "combinedTrials"
+  ).textContent =
+    combined.length;
+
+
+  if (!combined.length) {
+
+    document.getElementById(
+      "combinedAccuracy"
+    ).textContent =
+      "-";
+
+
+    document.getElementById(
+      "combinedAverage"
+    ).textContent =
+      "-";
+
+
+    return;
+  }
+
+
+  const correct =
+    combined.filter(
+      d => d.correct
+    ).length;
+
+
+  const accuracy =
+    correct /
+    combined.length *
+    100;
+
+
+  const average =
+    combined.reduce(
+      (sum, d) =>
+        sum + Number(d.responseTime || 0),
+      0
+    ) /
+    combined.length;
+
+
+  document.getElementById(
+    "combinedAccuracy"
+  ).textContent =
+    accuracy.toFixed(1) + "%";
+
+
+  document.getElementById(
+    "combinedAverage"
+  ).textContent =
+    formatTime(average);
+
+
+  drawTimeChart();
+
+  drawTileAccuracyChart();
+}
+
+
+/* =====================================================
+   グラフ：回答時間
+===================================================== */
+
+function drawTimeChart() {
+
+  const canvas =
+    document.getElementById(
+      "timeChart"
+    );
+
+
+  const ctx =
+    canvas.getContext("2d");
+
+
+  const data =
+    trialData;
+
+
+  const width =
+    canvas.clientWidth ||
+    800;
+
+
+  const height =
+    280;
+
+
+  const ratio =
+    window.devicePixelRatio || 1;
+
+
+  canvas.width =
+    width * ratio;
+
+  canvas.height =
+    height * ratio;
+
+
+  ctx.setTransform(
+    ratio,
+    0,
+    0,
+    ratio,
+    0,
+    0
+  );
+
+
+  ctx.clearRect(
+    0,
+    0,
+    width,
+    height
+  );
+
+
+  if (!data.length) {
+
+    ctx.fillText(
+      "データがありません",
+      20,
+      30
+    );
+
+    return;
+  }
+
+
+  const margin = {
+    left: 45,
+    right: 15,
+    top: 20,
+    bottom: 35
+  };
+
+
+  const chartWidth =
+    width -
+    margin.left -
+    margin.right;
+
+
+  const chartHeight =
+    height -
+    margin.top -
+    margin.bottom;
+
+
+  const maxTime =
+    Math.max(
+      ...data.map(
+        d => d.responseTime
+      ),
+      1000
+    );
+
+
+  /*
+    軸
+  */
+
+  ctx.beginPath();
+
+  ctx.moveTo(
+    margin.left,
+    margin.top
+  );
+
+  ctx.lineTo(
+    margin.left,
+    margin.top +
+    chartHeight
+  );
+
+  ctx.lineTo(
+    margin.left +
+    chartWidth,
+    margin.top +
+    chartHeight
+  );
+
+  ctx.stroke();
+
+
+  /*
+    線
+  */
+
+  ctx.beginPath();
+
+
+  data.forEach(
+    (d, index) => {
+
+      const x =
+        margin.left +
+        (
+          index /
+          Math.max(
+            data.length - 1,
+            1
+          )
+        ) *
+        chartWidth;
+
+
+      const y =
+        margin.top +
+        chartHeight -
+        (
+          d.responseTime /
+          maxTime
+        ) *
+        chartHeight;
+
+
+      if (index === 0) {
+
+        ctx.moveTo(x, y);
+
+      } else {
+
+        ctx.lineTo(x, y);
+
+      }
+
+    }
+  );
+
+
+  ctx.stroke();
+
+
+  /*
+    ラベル
+  */
+
+  ctx.fillStyle =
+    "#111";
+
+  ctx.font =
+    "11px sans-serif";
+
+
+  ctx.fillText(
+    "回答時間",
+    5,
+    15
+  );
+
+
+  ctx.fillText(
+    "試行",
+    width - 30,
+    height - 8
+  );
+}
+
+
+/* =====================================================
+   グラフ：タイル数別正答率
+===================================================== */
+
+function drawTileAccuracyChart() {
+
+  const canvas =
+    document.getElementById(
+      "tileAccuracyChart"
+    );
+
+
+  const ctx =
+    canvas.getContext("2d");
+
+
+  const combined =
+    importedData.concat(
+      trialData
+    );
+
+
+  const width =
+    canvas.clientWidth ||
+    800;
+
+
+  const height =
+    280;
+
+
+  const ratio =
+    window.devicePixelRatio || 1;
+
+
+  canvas.width =
+    width * ratio;
+
+  canvas.height =
+    height * ratio;
+
+
+  ctx.setTransform(
+    ratio,
+    0,
+    0,
+    ratio,
+    0,
+    0
+  );
+
+
+  ctx.clearRect(
+    0,
+    0,
+    width,
+    height
+  );
+
+
+  if (!combined.length) {
+
+    ctx.fillText(
+      "データがありません",
+      20,
+      30
+    );
+
+    return;
+  }
+
+
+  const groups = {};
+
+
+  combined.forEach(d => {
+
+    const count =
+      Number(d.tileCount);
+
+
+    if (!groups[count]) {
+
+      groups[count] = {
+        total: 0,
+        correct: 0
+      };
+
+    }
+
+
+    groups[count].total++;
+
+
+    if (d.correct) {
+
+      groups[count].correct++;
+
+    }
+
+  });
+
+
+  const keys =
+    Object.keys(groups)
+      .map(Number)
+      .sort(
+        (a, b) => a - b
+      );
+
+
+  const margin = {
+    left: 45,
+    right: 15,
+    top: 20,
+    bottom: 35
+  };
+
+
+  const chartWidth =
+    width -
+    margin.left -
+    margin.right;
+
+
+  const chartHeight =
+    height -
+    margin.top -
+    margin.bottom;
+
+
+  /*
+    軸
+  */
+
+  ctx.beginPath();
+
+  ctx.moveTo(
+    margin.left,
+    margin.top
+  );
+
+  ctx.lineTo(
+    margin.left,
+    margin.top +
+    chartHeight
+  );
+
+  ctx.lineTo(
+    margin.left +
+    chartWidth,
+    margin.top +
+    chartHeight
+  );
+
+  ctx.stroke();
+
+
+  /*
+    棒
+  */
+
+  const barWidth =
+    chartWidth /
+    keys.length *
+    0.6;
+
+
+  keys.forEach(
+    (key, index) => {
+
+      const accuracy =
+        groups[key].correct /
+        groups[key].total *
+        100;
+
+
+      const x =
+        margin.left +
+        (
+          index + 0.5
+        ) *
+        (
+          chartWidth /
+          keys.length
+        ) -
+        barWidth / 2;
+
+
+      const barHeight =
+        accuracy /
+        100 *
+        chartHeight;
+
+
+      const y =
+        margin.top +
+        chartHeight -
+        barHeight;
+
+
+      ctx.fillStyle =
+        "#111";
+
+
+      ctx.fillRect(
+        x,
+        y,
+        barWidth,
+        barHeight
+      );
+
+
+      ctx.fillStyle =
+        "#111";
+
+
+      ctx.font =
+        "11px sans-serif";
+
+
+      ctx.textAlign =
+        "center";
+
+
+      ctx.fillText(
+        accuracy.toFixed(1) + "%",
+        x + barWidth / 2,
+        y - 5
+      );
+
+
+      ctx.fillText(
+        key + "個",
+        x + barWidth / 2,
+        height - 10
+      );
+
+    }
+  );
+
+
+  ctx.textAlign =
+    "left";
+
+
+  ctx.fillText(
+    "正答率",
+    5,
+    15
+  );
+
+}
+
+
+/* =====================================================
+   ボタン
+===================================================== */
+
+startButton.addEventListener(
+  "click",
+  startExperiment
+);
+
+
+restartButton.addEventListener(
+  "click",
+  restartExperiment
+);
+
+
+againButton.addEventListener(
+  "click",
+  restartExperiment
+);
+
+
+/*
+  結果画面から実験画面へ戻る
+*/
+
+backButton.addEventListener(
+  "click",
+  function() {
+
+    clearTimers();
+
+    answering = false;
+
+
+    resultScreen.style.display =
+      "none";
+
+    experimentScreen.style.display =
+      "block";
+
+
+    instruction.textContent =
+      "スタートを押してください";
+
+
+    startButton.disabled =
+      false;
+
+
+    createGrid();
+
+  }
+);
+
+
+/* =====================================================
+   盤面クリック
+===================================================== */
+
+board.addEventListener(
+  "click",
+  function(event) {
+
+    const tile =
+      event.target.closest(
+        ".tile"
+      );
+
+
+    if (!tile) {
+      return;
+    }
+
+
+    handleTileClick(tile);
+
+  }
+);
+
+
+/* =====================================================
+   設定変更
+===================================================== */
+
+trialCountSelect.addEventListener(
+  "change",
+  function() {
+
+    trialTotal.textContent =
+      "全" +
+      this.value +
+      "回";
+
+  }
+);
+
+
+/* =====================================================
+   初期状態
+===================================================== */
+
+trialTotal.textContent =
+  "全" +
+  trialCountSelect.value +
+  "回";
+
+
+createGrid();
+
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
