@@ -244,9 +244,9 @@ select {
                 <option value="600">0.60秒</option>
                 <option value="650">0.65秒</option>
                 <option value="750">0.75秒</option>
-                <option value="1000">1.00秒</option>
-                <option value="1250">1.25秒</option>
-                <option value="2500" selected>2.50秒</option>
+                <option value="1000" selected>1.00秒</option>
+                <option value="2000">2.00秒</option>
+                <option value="3000">3.00秒</option>
                 <option value="5000">5.00秒</option>
             </select>
         </div>
@@ -330,7 +330,7 @@ select {
 <script>
 const BOARD_SIZE = 40;
 const MAX_SESSIONS = 50;
-const INACTION_TIMEOUT_MS = 10000;
+const INACTION_TIMEOUT_MS = 30000;
 
 let nextNumber = 1;
 let isClickable = false;
@@ -407,7 +407,7 @@ function handleInactionTimeout() {
     stopInactionTimer();
 
     const instruction = document.getElementById('instruction');
-    instruction.textContent = "⏱️ 10秒以上操作がなかったため無効トライアルとなりました";
+    instruction.textContent = "⏱️ 30秒以上操作がなかったため無効トライアルとなりました";
     instruction.style.color = "#e74c3c";
 
     setTimeout(() => {
